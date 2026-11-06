@@ -8,16 +8,18 @@ import {
   SafeAreaView,
   StatusBar,
   Modal,
-  TextInput,
   Platform,
 } from 'react-native';
 import { StatusBar as ExpoStatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { LoginScreen, type MobileAuthUser } from './src/screens/LoginScreen';
+import { WorkspaceHubScreen } from './src/screens/WorkspaceHubScreen';
 
 type LevelId = 'L1' | 'L2' | 'L3';
 type Lang = 'VI' | 'EN';
+type ScreenName = 'landing' | 'login' | 'workspace';
 
 interface LevelDetail {
   zone: string;
@@ -304,12 +306,11 @@ const SPARKLINE_BARS = [35, 55, 75, 60, 90, 100, 85, 70, 95, 80, 50, 40];
 
 export default function App() {
   const [lang, setLang] = useState<Lang>('VI');
+  const [screen, setScreen] = useState<ScreenName>('login');
+  const [currentUser, setCurrentUser] = useState<MobileAuthUser | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeLevel, setActiveLevel] = useState<LevelId>('L2');
   const [demoModalOpen, setDemoModalOpen] = useState(false);
-  const [signInModalOpen, setSignInModalOpen] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
 
   const scrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
   const sectionOffsets = useRef<Record<string, number>>({});
@@ -323,6 +324,43 @@ export default function App() {
       scrollRef.current.scrollTo({ y, animated: true });
     }
   };
+
+  if (screen === 'login') {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" />
+        <ExpoStatusBar style="light" />
+        <LoginScreen
+          lang={lang}
+          onToggleLang={() => setLang((prev) => (prev === 'VI' ? 'EN' : 'VI'))}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+            setScreen('workspace');
+          }}
+          onContinueAsGuest={() => setScreen('landing')}
+          onBackToHome={() => setScreen('landing')}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (screen === 'workspace' && currentUser) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar barStyle="light-content" />
+        <ExpoStatusBar style="light" />
+        <WorkspaceHubScreen
+          user={currentUser}
+          onUpdateUser={(updated) => setCurrentUser(updated)}
+          onOpenLanding={() => setScreen('landing')}
+          onLogout={() => {
+            setCurrentUser(null);
+            setScreen('login');
+          }}
+        />
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -354,6 +392,19 @@ export default function App() {
         </TouchableOpacity>
 
         <View style={styles.navRight}>
+          {/* Quick Login / Workspace Action in Navbar */}
+          <TouchableOpacity
+            style={styles.menuBtn}
+            activeOpacity={0.8}
+            onPress={() => setScreen(currentUser ? 'workspace' : 'login')}
+          >
+            <MaterialIcons
+              name={currentUser ? 'account-circle' : 'login'}
+              size={20}
+              color="#5de6ff"
+            />
+          </TouchableOpacity>
+
           {/* Language Pill */}
           <View style={styles.langPill}>
             <TouchableOpacity
@@ -419,12 +470,20 @@ export default function App() {
               style={styles.drawerGhostBtn}
               onPress={() => {
                 setDrawerOpen(false);
-                setSignInModalOpen(true);
+                setScreen(currentUser ? 'workspace' : 'login');
               }}
             >
-              <MaterialIcons name="login" size={16} color="#e3e0f6" />
+              <MaterialIcons
+                name={currentUser ? 'person' : 'login'}
+                size={16}
+                color="#e3e0f6"
+              />
               <Text style={styles.drawerGhostBtnText}>
-                {lang === 'VI' ? 'Đăng nhập' : 'Sign In'}
+                {currentUser
+                  ? currentUser.name
+                  : lang === 'VI'
+                  ? 'Đăng nhập'
+                  : 'Sign In'}
               </Text>
             </TouchableOpacity>
 
@@ -485,7 +544,7 @@ export default function App() {
           <View style={styles.heroActions}>
             <TouchableOpacity
               activeOpacity={0.88}
-              onPress={() => setSignInModalOpen(true)}
+              onPress={() => setScreen(currentUser ? 'workspace' : 'login')}
               style={styles.fullWidthBtnWrap}
             >
               <LinearGradient
@@ -494,9 +553,19 @@ export default function App() {
                 end={{ x: 1, y: 0 }}
                 style={styles.primaryBtn}
               >
-                <MaterialIcons name="rocket-launch" size={18} color="#0b0b1a" />
+                <MaterialIcons
+                  name={currentUser ? 'manage-accounts' : 'login'}
+                  size={18}
+                  color="#0b0b1a"
+                />
                 <Text style={styles.primaryBtnText}>
-                  {lang === 'VI' ? 'Bắt đầu miễn phí' : 'Get Started Free'}
+                  {currentUser
+                    ? lang === 'VI'
+                      ? `Hồ sơ: ${currentUser.name}`
+                      : `Profile: ${currentUser.name}`
+                    : lang === 'VI'
+                    ? 'Đăng nhập hệ thống'
+                    : 'Sign In to SpotWay'}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
@@ -913,7 +982,7 @@ export default function App() {
             <TouchableOpacity
               activeOpacity={0.88}
               style={styles.fullWidthBtnWrap}
-              onPress={() => setSignInModalOpen(true)}
+              onPress={() => setScreen(currentUser ? 'workspace' : 'login')}
             >
               <LinearGradient
                 colors={['#8b5cf6', '#22d3ee']}
@@ -1052,70 +1121,6 @@ export default function App() {
                 <MaterialIcons name="check-circle" size={18} color="#0b0b1a" />
                 <Text style={styles.primaryBtnText}>
                   {lang === 'VI' ? 'Đồng bộ lộ trình trên bản đồ' : 'Sync Route to HUD'}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ── MODAL 2: SIGN IN / WORKSPACE AUTH ── */}
-      <Modal
-        visible={signInModalOpen}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setSignInModalOpen(false)}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View style={styles.modalHeaderTitleRow}>
-                <MaterialIcons name="near-me" size={20} color="#d0bcff" />
-                <Text style={styles.modalTitle}>
-                  {lang === 'VI' ? 'Đăng nhập SpotWay OS' : 'SpotWay OS Sign In'}
-                </Text>
-              </View>
-              <TouchableOpacity onPress={() => setSignInModalOpen(false)}>
-                <MaterialIcons name="close" size={22} color="#cbc3d7" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.inputLabel}>EMAIL WORKSPACE</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="name@company.com"
-              placeholderTextColor="#6e687d"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-            />
-
-            <Text style={styles.inputLabel}>
-              {lang === 'VI' ? 'MẬT KHẨU' : 'PASSWORD'}
-            </Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="••••••••"
-              placeholderTextColor="#6e687d"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-
-            <TouchableOpacity
-              style={[styles.fullWidthBtnWrap, { marginTop: 8 }]}
-              onPress={() => setSignInModalOpen(false)}
-            >
-              <LinearGradient
-                colors={['#8b5cf6', '#22d3ee']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.primaryBtn}
-              >
-                <MaterialIcons name="login" size={18} color="#0b0b1a" />
-                <Text style={styles.primaryBtnText}>
-                  {lang === 'VI' ? 'Truy cập Hệ thống' : 'Sign In to Workspace'}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
