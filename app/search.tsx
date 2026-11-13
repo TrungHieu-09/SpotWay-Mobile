@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState } from '@/components/empty-state';
 import { Text } from '@/components/scaled-text';
 import { placesOf, type Place, type PlaceCategory, type StoreCategory } from '@/data/venue/places';
-import { loadVenue, useVenue } from '@/data/venue/venue';
+import { loadVenue, trackEvent, useVenue } from '@/data/venue/venue';
 import { useColors, type Colors } from '@/hooks/use-colors';
 import type { StoreRef } from '@/hooks/persisted-list';
 import { useFavorites } from '@/hooks/use-favorites';
@@ -79,6 +79,15 @@ export default function SearchScreen() {
       .filter((p) => !allowed || (p.category !== 'poi' && allowed.includes(p.category)))
       .filter((p) => !q || p.name.toLowerCase().includes(q) || t(`map.category.${p.category}`).toLowerCase().includes(q));
   }, [places, query, group, t]);
+
+  // Count a search once the user stops typing (not every keystroke).
+  const resultCount = results.length;
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) return;
+    const timer = setTimeout(() => trackEvent('SEARCH_PERFORMED', { query: q, resultCount }), 1200);
+    return () => clearTimeout(timer);
+  }, [query, resultCount]);
 
   const renderRow = (item: Place, key?: string) => (
     <Pressable

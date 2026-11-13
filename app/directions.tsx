@@ -23,6 +23,7 @@ import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
 import { LiveNotice } from '@/components/live-notice';
 import { RoutePromo } from '@/components/route-promo';
+import { TripTracker } from '@/components/trip-tracker';
 import { VoiceGuide } from '@/components/voice-guide';
 import { routeKey, useTrip } from '@/hooks/use-trip';
 import { SIM_SPEEDS, simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
@@ -228,6 +229,7 @@ export default function DirectionsScreen() {
   return (
     <View style={styles.root}>
       <LiveNotice />
+      <TripTracker tripKey={routeKey(evac, startNodeId, destId, 0)} evac={evac} destId={destId} arrived={arrived && legIndex === (legs?.length ?? 1) - 1} />
       {!evac && <RoutePromo routeNodeIds={routeNodeIds} destStoreId={destId} from={startNodeId} />}
       <VoiceGuide
         speakKey={`${routeKey(evac, startNodeId, destId, legIndex)}:${current}:${arrived ? 'end' : 'go'}`}

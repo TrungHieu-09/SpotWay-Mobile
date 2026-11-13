@@ -99,6 +99,16 @@ export const storeById = (id: string) =>
     .flatMap((m) => m.stores)
     .find((s) => s.id === id);
 
+export type TrackedEvent = 'SEARCH_PERFORMED' | 'ROUTE_STARTED' | 'ROUTE_COMPLETED' | 'EVACUATION_STARTED' | 'STORE_VIEWED';
+
+/** Anonymous usage event for the owner's analytics. Fire and forget: it never blocks or breaks the app. */
+export function trackEvent(
+  eventType: TrackedEvent,
+  extra: { targetId?: string; floorId?: string; query?: string; resultCount?: number; durationSeconds?: number } = {},
+): void {
+  request<unknown>('/public/events', { method: 'POST', body: JSON.stringify({ eventType, buildingId: BUILDING_ID, ...extra }) }, 6_000).catch(() => undefined);
+}
+
 /** Resolve a scanned QR token to the node the user is standing at. */
 export const resolveQrToken = (token: string) =>
   request<PublicQrResolution>(`/qr/${encodeURIComponent(token)}`, undefined, 10_000);
