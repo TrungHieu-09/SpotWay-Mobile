@@ -237,5 +237,8 @@
   "walk.iAmOnFloor": "Tôi đang ở tầng",
   "walk.noCompass": "Không đọc được la bàn. Chấm vị trí sẽ đi theo hướng của tuyến đường.",
   "walk.calibrate": "Hiệu chỉnh hướng: quay mặt theo hướng đi của tuyến rồi bấm",
-  "walk.rerouted": "Bạn đi lệch hướng. Đã tính lại đường đi ngắn nhất."
+  "walk.rerouted": "Bạn đi lệch hướng. Đã tính lại đường đi ngắn nhất.",
+  "demo.toggle": "Trình diễn vị trí trực tiếp (người đi giả lập)",
+  "demo.detour": "Giả lập đi ngược để xem app tính lại đường",
+  "demo.badge": "Chế độ trình diễn: người đi được giả lập. Bấm biểu tượng quay đầu để đi ngược, app sẽ tính lại đường ngắn nhất."
 }

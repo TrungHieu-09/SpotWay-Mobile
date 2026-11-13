@@ -17,7 +17,7 @@ import { FloorCanvas, markerScale } from '@/components/floor-canvas';
 import { EmptyState } from '@/components/empty-state';
 import { Text } from '@/components/scaled-text';
 import { stepHeadline, type Point, type StepKind } from '@/data/venue/plan';
-import { destinationById, floorLabel, metersPerPixelOf, nodeById } from '@/data/venue/venue';
+import { defaultStartNodeId, destinationById, floorLabel, metersPerPixelOf, nodeById } from '@/data/venue/venue';
 import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
@@ -28,8 +28,8 @@ import { RoutePromo } from '@/components/route-promo';
 import { TripTracker } from '@/components/trip-tracker';
 import { VoiceGuide } from '@/components/voice-guide';
 import { routeKey, useTrip } from '@/hooks/use-trip';
-import { bearing, trackOnRoute } from '@/data/venue/livepos';
-import { useLivePosition } from '@/hooks/use-live-position';
+import { bearing, projectOnPolyline, trackOnRoute } from '@/data/venue/livepos';
+import { STRIDE_METERS, useLivePosition } from '@/hooks/use-live-position';
 import { SIM_SPEEDS, simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
 
 import { useColors, type Colors } from '@/hooks/use-colors';
@@ -63,6 +63,14 @@ const REVERSE_M = 6;
 /** Within this distance of the end the person has arrived (metres). */
 const ARRIVE_M = 2.5;
 const REROUTE_COOLDOWN_MS = 3000;
+/** Demo walker: one step every this many ms at 1x (about 0.8 m/s), divided by the chosen speed. */
+const DEMO_STEP_MS = 900;
+/** Steps walked the wrong way when the presenter taps "walk back" (enough to pass the 6 m reversal limit). */
+const DEMO_DETOUR_STEPS = 12;
+/** A demo walker that has not moved for this many ticks is put back on the route. */
+const DEMO_STUCK_TICKS = 3;
+/** Pause on arriving at a lift / stairs before the demo person "presses" the next floor. */
+const DEMO_FLOOR_PAUSE_MS = 1600;
 
 const lowerFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
@@ -132,7 +140,10 @@ export default function DirectionsScreen() {
   // ---- Live position (real walking): steps + compass on the floor graph, floor chosen with the floor buttons ----------
   const segForBearing = Math.min(sim.segmentIndex, Math.max(0, corners.length - 2));
   const expectedBearing = corners.length >= 2 ? bearing(corners[segForBearing], corners[segForBearing + 1]) : undefined;
-  const livePos = useLivePosition({ enabled: realWalk && !!trip, startNodeId, routeNodeIds, expectedBearing });
+  // Demo: the same live-position pipeline, driven by a timer instead of the pedometer and compass.
+  const [demoDrive, setDemoDrive] = useState(false);
+  const [demoPaused, setDemoPaused] = useState(false);
+  const livePos = useLivePosition({ enabled: realWalk && !!trip, startNodeId, routeNodeIds, expectedBearing, simulated: demoDrive });
   const routeMpp = metersPerPixelOf(routeFloorId);
   const bestAlong = useRef(0);
   const offCount = useRef(0);
@@ -189,6 +200,79 @@ export default function DirectionsScreen() {
   useEffect(() => {
     if (realWalk && livePos.floorId) setViewFloorId(livePos.floorId);
   }, [realWalk, livePos.floorId]);
+
+  // ---- Demo walker ----------------------------------------------------------------------------------------------
+  const detourSteps = useRef(0);
+  const stuckTicks = useRef(0);
+  const lastDemoPoint = useRef<{ x: number; y: number } | null>(null);
+  const expectedRef = useRef(expectedBearing);
+  expectedRef.current = expectedBearing;
+  const cornersRef = useRef(corners);
+  cornersRef.current = corners;
+  const routeMppRef = useRef(routeMpp);
+  routeMppRef.current = routeMpp;
+  useEffect(() => {
+    if (!demoDrive || !realWalk || demoPaused || sim.finished) return;
+    const timer = setInterval(() => {
+      const live = latestLive.current.livePos;
+      const route = cornersRef.current;
+      const heading = expectedRef.current;
+      if (heading === undefined || !live.point || route.length < 2) return;
+      // A walker that cannot move (facing a wall at the end of a side corridor) is put back on the route.
+      const last = lastDemoPoint.current;
+      stuckTicks.current = last && Math.hypot(live.point.x - last.x, live.point.y - last.y) < 0.05 * (STRIDE_METERS / routeMppRef.current) ? stuckTicks.current + 1 : 0;
+      lastDemoPoint.current = live.point;
+      if (stuckTicks.current >= DEMO_STUCK_TICKS) {
+        stuckTicks.current = 0;
+        detourSteps.current = 0;
+        const onRoute = projectOnPolyline(route, live.point);
+        if (onRoute) live.snapTo(onRoute.point);
+        return;
+      }
+      if (detourSteps.current > 0) {
+        detourSteps.current -= 1;
+        live.addSteps(1, (heading + 180) % 360);
+        return;
+      }
+      // Walk towards the end of the current segment; a step that rounds a corner is split so the turn is taken
+      // exactly at the corner (otherwise a walker facing straight on would pass a T-junction and look lost).
+      const at = projectOnPolyline(route, live.point);
+      const target = route[Math.min((at?.segment ?? 0) + 1, route.length - 1)];
+      const after = route[(at?.segment ?? 0) + 2];
+      const stepPx = STRIDE_METERS / routeMppRef.current;
+      const toCorner = Math.hypot(target.x - live.point.x, target.y - live.point.y);
+      if (!after || toCorner >= stepPx) {
+        live.addSteps(1, bearing(live.point, target));
+      } else {
+        live.addSteps(toCorner / stepPx, bearing(live.point, target));
+        live.addSteps(1 - toCorner / stepPx, bearing(target, after));
+      }
+    }, DEMO_STEP_MS / SIM_SPEEDS[speedIndex]);
+    return () => clearInterval(timer);
+  }, [demoDrive, realWalk, demoPaused, sim.finished, speedIndex]);
+  // At a lift / stairs the demo person "taps" the floor they arrive on, like a real user would.
+  const nextLegFloor = legs?.[legIndex + 1]?.floorId;
+  const waitingForFloor = demoDrive && realWalk && sim.finished && !!nextLegFloor && plan?.steps[plan.steps.length - 1]?.kind === 'transfer';
+  useEffect(() => {
+    if (!waitingForFloor || !nextLegFloor) return;
+    const id = setTimeout(() => latestLive.current.livePos.setFloor(nextLegFloor), DEMO_FLOOR_PAUSE_MS);
+    return () => clearTimeout(id);
+  }, [waitingForFloor, nextLegFloor]);
+  const originNode = from && nodeById(from) ? from : defaultStartNodeId();
+  const restartWalk = () => {
+    sim.restart();
+    setStartOverride(undefined);
+    detourSteps.current = 0;
+    if (realWalk && originNode) livePos.placeAt(originNode);
+  };
+  const toggleDemo = () => {
+    const next = !demoDrive;
+    setDemoDrive(next);
+    setDemoPaused(false);
+    setRealWalk(next);
+    detourSteps.current = 0;
+    if (!next) setStartOverride(undefined);
+  };
   useEffect(() => {
     setActive(segmentIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -323,6 +407,11 @@ export default function DirectionsScreen() {
       {realWalk && livePos.stepSensor === 'ready' && (livePos.compass === 'denied' || livePos.compass === 'unavailable') && (
         <View style={styles.sensorNote} pointerEvents="none">
           <Text style={styles.sensorNoteText}>{t('walk.noCompass')}</Text>
+        </View>
+      )}
+      {demoDrive && (
+        <View style={styles.sensorNote} pointerEvents="none">
+          <Text style={styles.sensorNoteText}>{t('demo.badge')}</Text>
         </View>
       )}
       <RerouteBanner at={reroutedAt} />
@@ -547,7 +636,10 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
           accessibilityRole="switch"
           accessibilityState={{ checked: realWalk }}
           accessibilityLabel={t('walk.real')}
-          onPress={() => setRealWalk((on) => !on)}
+          onPress={() => {
+            setDemoDrive(false);
+            setRealWalk((on) => (demoDrive ? true : !on));
+          }}
           hitSlop={6}
           style={[styles.simBtn, realWalk && { backgroundColor: BLUE }]}>
           <MaterialIcons name="directions-walk" size={22} color={realWalk ? '#FFFFFF' : BLUE} />
@@ -557,7 +649,32 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
             <MaterialIcons name="explore" size={22} color={BLUE} />
           </Pressable>
         )}
-        {realWalk && !sim.finished && (
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: demoDrive }}
+          accessibilityLabel={t('demo.toggle')}
+          onPress={toggleDemo}
+          hitSlop={6}
+          style={[styles.simBtn, demoDrive && { backgroundColor: BLUE }]}>
+          <MaterialIcons name="smart-display" size={22} color={demoDrive ? '#FFFFFF' : BLUE} />
+        </Pressable>
+        {demoDrive && !sim.finished && (
+          <>
+            <Pressable accessibilityRole="button" accessibilityLabel={demoPaused ? t('dir.resume') : t('dir.pause')} onPress={() => setDemoPaused((p) => !p)} hitSlop={6} style={styles.simBtn}>
+              <MaterialIcons name={demoPaused ? 'play-arrow' : 'pause'} size={22} color={BLUE} />
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('demo.detour')} onPress={() => {
+                // Walk back at most 75% of the way already covered, so the presenter cannot go past the start of the route.
+                const here = livePos.point ? projectOnPolyline(corners, livePos.point) : undefined;
+                const covered = here ? Math.floor((here.along * routeMpp * 0.75) / STRIDE_METERS) : 0;
+                detourSteps.current = Math.max(3, Math.min(DEMO_DETOUR_STEPS, covered));
+                setDemoPaused(false);
+              }} hitSlop={6} style={styles.simBtn}>
+              <MaterialIcons name="u-turn-left" size={22} color={BLUE} />
+            </Pressable>
+          </>
+        )}
+        {realWalk && !demoDrive && !sim.finished && (
           <Pressable accessibilityRole="button" accessibilityLabel={t('walk.tapSteps')} onPress={() => livePos.addSteps(TAP_STEPS, expectedBearing)} hitSlop={6} style={styles.simBtn}>
             <Text style={styles.speedText}>{`+${TAP_STEPS}`}</Text>
           </Pressable>
@@ -580,7 +697,7 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
           style={styles.simBtn}>
           <MaterialIcons name="layers" size={22} color={BLUE} />
         </Pressable>
-        {!realWalk && !sim.finished && (
+        {(!realWalk || demoDrive) && !sim.finished && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('dir.speed', { speed: SIM_SPEEDS[speedIndex] })}
@@ -593,7 +710,7 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('dir.restart')}
-          onPress={sim.restart}
+          onPress={restartWalk}
           hitSlop={6}
           style={styles.simBtn}>
           <MaterialIcons name="replay" size={22} color={BLUE} />

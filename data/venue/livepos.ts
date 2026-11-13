@@ -118,35 +118,69 @@ const TURN_BACK_ALIGNMENT = 0.5;
 
 /**
  * Moves the position `distance` (map pixels) while facing `headingDeg` (map frame).
- * Walks along the current edge in the direction the heading points; at a node takes the neighbour edge that best matches
- * the heading (the planned route gets a bonus); stops at a dead end.
+ * Along an edge it walks the way the heading points; whenever it stands exactly on a node (start, end of an edge) it
+ * takes the neighbour edge that best matches the heading (the planned route gets a bonus), so a sharp corner is turned
+ * instead of walked back; it stops at a dead end or when facing a wall.
  */
 export function moveAlong(graph: FloorGraph, loc: Loc, distance: number, headingDeg: number, options: MoveOptions = {}): Loc {
   const hv = headingVector(headingDeg);
   let { a, b, t } = loc;
   let left = distance;
   let guard = 0;
+  let justChose = false;
+  const EPS = 1e-9;
 
-  const orient = () => {
-    const pa = graph.nodes.get(a)!;
-    const pb = graph.nodes.get(b)!;
-    const len = dist(pa, pb);
-    if (len === 0) return len;
-    const align = ((pb.x - pa.x) * hv.x + (pb.y - pa.y) * hv.y) / len;
-    // Face the way the heading points along this edge (flip the travel direction when it points backwards).
-    if (align < -AMBIGUOUS) {
-      [a, b] = [b, a];
-      t = 1 - t;
+  /** Best edge leaving `node`; going back to `came` needs a clear heading that way, not just a sideways one. */
+  const pickNext = (node: string, came: string | undefined): string | undefined => {
+    const here = graph.nodes.get(node)!;
+    let bestNext: string | undefined;
+    let bestScore = -Infinity;
+    for (const next of graph.adjacency.get(node) ?? []) {
+      const q = graph.nodes.get(next)!;
+      const l = dist(here, q);
+      if (l === 0) continue;
+      const align = ((q.x - here.x) * hv.x + (q.y - here.y) * hv.y) / l;
+      if (next === came && align < TURN_BACK_ALIGNMENT) continue;
+      const score = align + (options.prefer?.has(edgeKey(node, next)) ? ROUTE_BONUS : 0);
+      if (score > bestScore) {
+        bestScore = score;
+        bestNext = next;
+      }
     }
-    return len;
+    return bestScore < MIN_TURN_ALIGNMENT ? undefined : bestNext;
   };
 
   while (left > 1e-6 && guard++ < 64) {
     if (!graph.nodes.has(a) || !graph.nodes.has(b)) break;
-    const len = orient();
-    if (len === 0) {
-      // Isolated or zero-length edge: nothing to walk on.
-      break;
+    if (!justChose && (t >= 1 - EPS || t <= EPS)) {
+      // Standing on a node: choose the way on from the heading.
+      const atEnd = t >= 1 - EPS;
+      const node = atEnd ? b : a;
+      const next = pickNext(node, atEnd ? a : undefined);
+      if (next === undefined) {
+        // Dead end, or the person faces a wall: stay at the node.
+        a = atEnd ? a : node;
+        b = atEnd ? node : b;
+        t = atEnd ? 1 : 0;
+        break;
+      }
+      a = node;
+      b = next;
+      t = 0;
+      justChose = true;
+      continue;
+    }
+    justChose = false;
+
+    const pa = graph.nodes.get(a)!;
+    const pb = graph.nodes.get(b)!;
+    const len = dist(pa, pb);
+    if (len === 0) break; // isolated or zero-length edge: nothing to walk on
+    // Mid-edge: face the way the heading points (flip the travel direction when it points backwards).
+    const align = ((pb.x - pa.x) * hv.x + (pb.y - pa.y) * hv.y) / len;
+    if (align < -AMBIGUOUS) {
+      [a, b] = [b, a];
+      t = 1 - t;
     }
     const room = (1 - t) * len;
     if (left <= room) {
@@ -155,32 +189,7 @@ export function moveAlong(graph: FloorGraph, loc: Loc, distance: number, heading
       break;
     }
     left -= room;
-    // Reached node b: choose where to go next.
-    const here = graph.nodes.get(b)!;
-    let bestNext: string | undefined;
-    let bestScore = -Infinity;
-    for (const next of graph.adjacency.get(b) ?? []) {
-      const q = graph.nodes.get(next)!;
-      const l = dist(here, q);
-      if (l === 0) continue;
-      const align = ((q.x - here.x) * hv.x + (q.y - here.y) * hv.y) / l;
-      // Turning back the way we came needs a clear heading that way, not just a sideways one (otherwise a dead end sends us back).
-      if (next === a && align < TURN_BACK_ALIGNMENT) continue;
-      const score = align + (options.prefer?.has(edgeKey(b, next)) ? ROUTE_BONUS : 0);
-      if (score > bestScore) {
-        bestScore = score;
-        bestNext = next;
-      }
-    }
-    if (bestNext === undefined || bestScore < MIN_TURN_ALIGNMENT) {
-      // Dead end, or the person faces a wall: stay at the node.
-      t = 1;
-      left = 0;
-      break;
-    }
-    a = b;
-    b = bestNext;
-    t = 0;
+    t = 1;
   }
   return { floorId: loc.floorId, a, b, t: Math.max(0, Math.min(1, t)) };
 }

@@ -45,6 +45,8 @@ export type LivePosition = {
   placeAt: (nodeId: string) => void;
   /** Align the compass so that "facing the route" matches the compass right now. */
   calibrate: () => void;
+  /** Put the person at the closest point of the walkable graph to a map point (demo: gets a stuck walker back on the route). */
+  snapTo: (point: Pt) => void;
 };
 
 type Options = {
@@ -55,13 +57,15 @@ type Options = {
   routeNodeIds: string[] | null;
   /** Bearing of the current route segment on the current floor (map frame), used to calibrate the compass. */
   expectedBearing: number | undefined;
+  /** Demo: steps come from the caller (a timer), so the pedometer and compass are not started. */
+  simulated?: boolean;
 };
 
 /**
  * The person's live position: steps from the pedometer, direction from the compass, kept on the walkable graph of the
  * floor they say they are on. See `data/venue/livepos.ts` for the movement rules.
  */
-export function useLivePosition({ enabled, startNodeId, routeNodeIds, expectedBearing }: Options): LivePosition {
+export function useLivePosition({ enabled, startNodeId, routeNodeIds, expectedBearing, simulated = false }: Options): LivePosition {
   const venue = useVenue();
   const [loc, setLoc] = useState<Loc | undefined>();
   const [version, setVersion] = useState(0);
@@ -84,7 +88,7 @@ export function useLivePosition({ enabled, startNodeId, routeNodeIds, expectedBe
   const graphsRef = useRef(graphs);
   graphsRef.current = graphs;
 
-  const compass = useCompassHeading(enabled);
+  const compass = useCompassHeading(enabled && !simulated);
 
   const commit = useCallback((next: Loc | undefined) => {
     setLoc(next);
@@ -140,8 +144,10 @@ export function useLivePosition({ enabled, startNodeId, routeNodeIds, expectedBe
         ? routeEdgeSet(latest.current.routeNodeIds, (id) => nodeById(id)?.floorId, current.floorId)
         : undefined;
       const distancePx = (steps * STRIDE_METERS) / metersPerPixelOf(current.floorId);
+      const moved = moveAlong(graph, current, distancePx, mapHeading, { prefer });
+      latest.current.loc = moved;
       setHeading(mapHeading);
-      commit(moveAlong(graph, current, distancePx, mapHeading, { prefer }));
+      commit(moved);
     },
     [commit, compass],
   );
@@ -183,10 +189,20 @@ export function useLivePosition({ enabled, startNodeId, routeNodeIds, expectedBe
     calibrated.current = true;
   }, [compass]);
 
-  const stepSensor = useStepCounter(enabled, (steps) => addSteps(steps));
+  const snapTo = useCallback(
+    (target: Pt) => {
+      const current = latest.current.loc;
+      const graph = current ? graphsRef.current.get(current.floorId) : undefined;
+      const next = graph ? snapToGraph(graph, target) : undefined;
+      if (next) commit(next);
+    },
+    [commit],
+  );
+
+  const stepSensor = useStepCounter(enabled && !simulated, (steps) => addSteps(steps));
 
   const graph = loc ? graphs.get(loc.floorId) : undefined;
   const point = loc && graph ? locPoint(graph, loc) : undefined;
 
-  return { floorId: loc?.floorId, loc, point, heading, version, stepSensor, compass: compass.status, addSteps, setFloor, placeAt, calibrate };
+  return { floorId: loc?.floorId, loc, point, heading, version, stepSensor, compass: compass.status, addSteps, setFloor, placeAt, calibrate, snapTo };
 }
