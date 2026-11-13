@@ -208,5 +208,16 @@
   "route3d.title": "Tuyến đi xuyên các tầng",
   "route3d.floors": "{{count}} tầng",
   "route3d.transfers": "{{count}} lần chuyển tầng",
-  "route3d.hint": "Chạm vào một tầng để làm nổi bật. Chấm xanh là điểm xuất phát."
+  "route3d.hint": "Chạm vào một tầng để làm nổi bật. Chấm xanh là điểm xuất phát.",
+  "multi.open": "Lên chuyến mua sắm nhiều điểm",
+  "multi.title": "Chuyến mua sắm",
+  "multi.subtitle": "Chọn tối đa {{max}} nơi, app sắp thứ tự đi ngắn nhất",
+  "multi.hint": "Chọn các nơi bạn muốn ghé.",
+  "multi.noRoute": "Không tìm thấy đường tới các nơi đã chọn.",
+  "multi.summary": "Tổng {{meters}} m · khoảng {{minutes}} phút",
+  "multi.saved": "Ngắn hơn {{meters}} m so với thứ tự bạn chọn",
+  "multi.meters": "{{count}} m",
+  "multi.unreachable": "{{count}} nơi không đi tới được nên bị bỏ qua",
+  "multi.start": "Bắt đầu chuyến đi",
+  "multi.next": "Điểm tiếp theo: {{name}}"
 }

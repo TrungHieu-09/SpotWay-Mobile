@@ -414,6 +414,13 @@ export default function FloorMapScreen() {
             </Text>
           </Pressable>
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('multi.open')}
+            onPress={() => router.push({ pathname: '/trip-planner' as never, params: { from: startNodeId } })}
+            style={styles.floorBtn}>
+            <MaterialIcons name="checklist" size={20} color={MUTED} />
+          </Pressable>
+          <Pressable
             ref={floorBtnRef}
             accessibilityRole="button"
             accessibilityLabel={t('map.floorPick', { floor })}

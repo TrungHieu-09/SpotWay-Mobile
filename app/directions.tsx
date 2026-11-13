@@ -17,7 +17,7 @@ import { FloorCanvas, markerScale } from '@/components/floor-canvas';
 import { EmptyState } from '@/components/empty-state';
 import { Text } from '@/components/scaled-text';
 import { stepHeadline, type Point, type StepKind } from '@/data/venue/plan';
-import { floorLabel, metersPerPixelOf } from '@/data/venue/venue';
+import { destinationById, floorLabel, metersPerPixelOf } from '@/data/venue/venue';
 import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
@@ -61,14 +61,17 @@ export default function DirectionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
-  const { to, dest, from, mode } = useLocalSearchParams<{
+  const { to, dest, from, mode, queue } = useLocalSearchParams<{
     to?: string;
     dest?: string;
     from?: string;
     mode?: string;
+    /** Remaining stops of a multi-stop trip (comma separated destination ids). */
+    queue?: string;
   }>();
   const evac = mode === 'evac';
   const destId = to ?? dest ?? '';
+  const [nextStopId, ...restQueue] = (queue ?? '').split(',').filter(Boolean);
 
   // One leg per floor, joined by 'transfer' steps; computed on the phone by the routing engine.
   const { venue, trip, routeNodeIds, startNodeId, incident } = useTrip({ to: destId, from, evac });
@@ -414,6 +417,16 @@ export default function DirectionsScreen() {
         </View>
         {arrived && !evac ? (
           <View style={styles.arrivedBtns}>
+            {nextStopId ? (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() =>
+                  router.replace({ pathname: '/directions', params: { to: nextStopId, from: destinationById(destId)?.nodeId ?? from, queue: restQueue.join(',') } })
+                }
+                style={[styles.arrivedBtn, styles.arrivedBtnPrimary]}>
+                <Text style={styles.arrivedBtnPrimaryText}>{t('multi.next', { name: destinationById(nextStopId)?.name ?? '' })}</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               onPress={() => router.push({ pathname: '/store', params: { id: destId, from } })}

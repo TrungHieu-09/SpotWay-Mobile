@@ -31,6 +31,7 @@ export default function RootLayout() {
         <Stack.Screen name="directions" options={{ headerShown: false }} />
         <Stack.Screen name="directions-list" options={{ headerShown: false }} />
         <Stack.Screen name="route-3d" options={{ headerShown: false }} />
+        <Stack.Screen name="trip-planner" options={{ headerShown: false }} />
       </Stack>
       <EvacuationGate />
       <StatusBar style="auto" />

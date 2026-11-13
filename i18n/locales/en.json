@@ -208,5 +208,16 @@
   "route3d.title": "Route across floors",
   "route3d.floors": "{{count}} floors",
   "route3d.transfers": "{{count}} floor changes",
-  "route3d.hint": "Tap a floor to highlight it. The green dot is where you start."
+  "route3d.hint": "Tap a floor to highlight it. The green dot is where you start.",
+  "multi.open": "Plan a multi-stop shopping trip",
+  "multi.title": "Shopping trip",
+  "multi.subtitle": "Pick up to {{max}} places; the app finds the shortest order",
+  "multi.hint": "Pick the places you want to visit.",
+  "multi.noRoute": "No route to the selected places.",
+  "multi.summary": "Total {{meters}} m · about {{minutes}} min",
+  "multi.saved": "{{meters}} m shorter than your order",
+  "multi.meters": "{{count}} m",
+  "multi.unreachable": "{{count}} place(s) cannot be reached and were skipped",
+  "multi.start": "Start trip",
+  "multi.next": "Next stop: {{name}}"
 }
