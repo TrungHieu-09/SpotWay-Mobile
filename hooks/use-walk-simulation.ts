@@ -30,6 +30,10 @@ export type WalkSimulation = {
   seekToSegment: (index: number) => void;
   /** Move the marker forward by a distance in map pixels (used by real walking). */
   advance: (pixels: number) => void;
+  /** Put the marker at an absolute distance along the route, in map pixels (live position projected on the route). */
+  seekToDistance: (pixels: number) => void;
+  /** Length of the whole polyline in map pixels. */
+  total: number;
 };
 
 /** Moves a marker along a polyline at constant speed, so corners do not cause jumps. */
@@ -102,6 +106,7 @@ export function useWalkSimulation(corners: Point[], speed: number, manual = fals
   );
 
   const advance = useCallback((pixels: number) => setDist((d) => Math.min(total, Math.max(0, d + pixels))), [total]);
+  const seekToDistance = useCallback((pixels: number) => setDist(Math.min(total, Math.max(0, pixels))), [total]);
 
-  return { position, heading, segmentIndex, progress, playing, finished, play, pause, restart, seekToSegment, advance };
+  return { position, heading, segmentIndex, progress, playing, finished, play, pause, restart, seekToSegment, advance, seekToDistance, total };
 }

@@ -17,17 +17,19 @@ import { FloorCanvas, markerScale } from '@/components/floor-canvas';
 import { EmptyState } from '@/components/empty-state';
 import { Text } from '@/components/scaled-text';
 import { stepHeadline, type Point, type StepKind } from '@/data/venue/plan';
-import { destinationById, floorLabel, metersPerPixelOf } from '@/data/venue/venue';
+import { destinationById, floorLabel, metersPerPixelOf, nodeById } from '@/data/venue/venue';
 import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
 import { LiveNotice } from '@/components/live-notice';
 import { ExitClaimer } from '@/components/exit-claimer';
+import { RerouteBanner } from '@/components/reroute-banner';
 import { RoutePromo } from '@/components/route-promo';
 import { TripTracker } from '@/components/trip-tracker';
 import { VoiceGuide } from '@/components/voice-guide';
 import { routeKey, useTrip } from '@/hooks/use-trip';
-import { useStepCounter } from '@/hooks/use-step-counter';
+import { bearing, trackOnRoute } from '@/data/venue/livepos';
+import { useLivePosition } from '@/hooks/use-live-position';
 import { SIM_SPEEDS, simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
 
 import { useColors, type Colors } from '@/hooks/use-colors';
@@ -52,9 +54,15 @@ const STEP_ICON: Record<Exclude<StepKind, 'transfer'>, keyof typeof MaterialIcon
 type Focus = 'follow' | 'stairs' | 'elevator';
 
 const NO_CORNERS: Point[] = [];
-/** Average adult stride (m) and the steps added by the tap fallback when the pedometer is not usable. */
-const STRIDE_METERS = 0.7;
+/** Steps added by the tap fallback when the pedometer is not usable. */
 const TAP_STEPS = 3;
+/** Farther than this from the planned route counts as having gone off it (metres). */
+const OFF_ROUTE_M = 6;
+/** Walking this far back along the route counts as turning around (metres). */
+const REVERSE_M = 6;
+/** Within this distance of the end the person has arrived (metres). */
+const ARRIVE_M = 2.5;
+const REROUTE_COOLDOWN_MS = 3000;
 
 const lowerFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
@@ -81,7 +89,9 @@ export default function DirectionsScreen() {
   const [nextStopId, ...restQueue] = (queue ?? '').split(',').filter(Boolean);
 
   // One leg per floor, joined by 'transfer' steps; computed on the phone by the routing engine.
-  const { venue, trip, routeNodeIds, evacExit, startNodeId, incident } = useTrip({ to: destId, from, evac, label });
+  // After going off the route the new route starts at a corridor node near the person instead of the scanned QR point.
+  const [startOverride, setStartOverride] = useState<string | undefined>();
+  const { venue, trip, routeNodeIds, evacExit, startNodeId, incident, measureFrom } = useTrip({ to: destId, from: startOverride ?? from, evac, label });
   const mapTextScale = 1 + (useTextScale() - 1) * 0.5;
   void mapTextScale;
   const legs = trip?.legs ?? null;
@@ -117,9 +127,68 @@ export default function DirectionsScreen() {
   const [speedIndex, setSpeedIndex] = useState(1);
   const [realWalk, setRealWalk] = useState(false);
   const sim = useWalkSimulation(corners, simSpeed(metersPerPixelOf(routeFloorId), SIM_SPEEDS[speedIndex]), realWalk);
-  // Real walking: every counted step moves the marker by one stride along the route.
-  const stepSensor = useStepCounter(realWalk, (steps) => sim.advance((steps * STRIDE_METERS) / metersPerPixelOf(routeFloorId)));
   const { segmentIndex, seekToSegment } = sim;
+
+  // ---- Live position (real walking): steps + compass on the floor graph, floor chosen with the floor buttons ----------
+  const segForBearing = Math.min(sim.segmentIndex, Math.max(0, corners.length - 2));
+  const expectedBearing = corners.length >= 2 ? bearing(corners[segForBearing], corners[segForBearing + 1]) : undefined;
+  const livePos = useLivePosition({ enabled: realWalk && !!trip, startNodeId, routeNodeIds, expectedBearing });
+  const routeMpp = metersPerPixelOf(routeFloorId);
+  const bestAlong = useRef(0);
+  const offCount = useRef(0);
+  const lastReroute = useRef(0);
+  const [reroutedAt, setReroutedAt] = useState(0);
+  const latestLive = useRef({ livePos, measureFrom, startNodeId });
+  latestLive.current = { livePos, measureFrom, startNodeId };
+  useEffect(() => {
+    bestAlong.current = 0;
+    offCount.current = 0;
+  }, [trip, legIndex]);
+
+  /** A new route from the corridor end (behind or ahead of the person) that gives the shortest way to the goal. */
+  const reroute = useCallback((force = false) => {
+    const { livePos: lp, measureFrom: measure, startNodeId: currentStart } = latestLive.current;
+    const loc = lp.loc;
+    const point = lp.point;
+    // A floor change is an explicit action of the person: never held back by the cooldown that damps position noise.
+    if (!loc || !point || (!force && Date.now() - lastReroute.current < REROUTE_COOLDOWN_MS)) return;
+    const a = nodeById(loc.a);
+    const b = nodeById(loc.b);
+    if (!a || !b) return;
+    const mpp = metersPerPixelOf(loc.floorId);
+    const costA = Math.hypot(point.x - a.x, point.y - a.y) * mpp + measure(a.id);
+    const costB = Math.hypot(point.x - b.x, point.y - b.y) * mpp + measure(b.id);
+    if (!Number.isFinite(costA) && !Number.isFinite(costB)) return;
+    const best = costA <= costB ? a.id : b.id;
+    if (best === currentStart) return;
+    lastReroute.current = Date.now();
+    setStartOverride(best);
+    setReroutedAt(Date.now());
+  }, []);
+
+  useEffect(() => {
+    if (!realWalk || !livePos.loc || !livePos.point || !legs) return;
+    const liveFloor = livePos.floorId;
+    if (liveFloor !== routeFloorId) {
+      // The person picked another floor: continue on the leg of that floor, or recompute if the route never goes there.
+      const candidates = legs.map((l, i) => ({ l, i })).filter(({ l, i }) => l.floorId === liveFloor && i !== legIndex);
+      const target = candidates.find(({ i }) => i > legIndex) ?? candidates[candidates.length - 1];
+      if (target) setLegIndex(target.i);
+      else reroute(true);
+      return;
+    }
+    const tracker = { bestAlong: bestAlong.current, offCount: offCount.current };
+    const result = trackOnRoute(corners, livePos.point, routeMpp, tracker, { offRouteM: OFF_ROUTE_M, reverseM: REVERSE_M, arriveM: ARRIVE_M, offSamples: 2 });
+    bestAlong.current = tracker.bestAlong;
+    offCount.current = tracker.offCount;
+    if (result.action === 'follow') sim.seekToDistance(result.along);
+    else if (result.action === 'reroute') reroute();
+    // Only a new live position (or a new route) matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [livePos.version, corners]);
+  useEffect(() => {
+    if (realWalk && livePos.floorId) setViewFloorId(livePos.floorId);
+  }, [realWalk, livePos.floorId]);
   useEffect(() => {
     setActive(segmentIndex);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,10 +213,11 @@ export default function DirectionsScreen() {
   const lastStep = plan?.steps[plan.steps.length - 1];
   const atTransfer = lastStep?.kind === 'transfer' && sim.finished;
   useEffect(() => {
-    if (!atTransfer || !legs || legIndex >= legs.length - 1) return;
+    // With real walking the person says when they reached the next floor (floor buttons) instead of a timer.
+    if (realWalk || !atTransfer || !legs || legIndex >= legs.length - 1) return;
     const id = setTimeout(() => setLegIndex((i) => i + 1), 2000);
     return () => clearTimeout(id);
-  }, [atTransfer, legs, legIndex]);
+  }, [atTransfer, legs, legIndex, realWalk]);
 
   if (!plan) {
     return (
@@ -178,8 +248,10 @@ export default function DirectionsScreen() {
   const next = steps[current + 1];
   const onRouteFloor = viewFloor === routeFloor;
 
-  // Position + heading come from the walk simulation; leg bounds still drive the camera.
-  const { position, heading } = sim;
+  // Position + heading: the live position when walking for real, otherwise the simulation; leg bounds still drive the camera.
+  const livePoint = realWalk && livePos.point && livePos.floorId === routeFloor ? livePos.point : null;
+  const position = livePoint ?? sim.position;
+  const heading = realWalk && livePos.heading !== undefined ? livePos.heading : sim.heading;
   const legFrom = corners[Math.min(current, legCount - 1)] ?? position;
   const legTo = corners[Math.min(current + 1, legCount)] ?? position;
   const legLeft = step.kind === 'arrive' ? 0 : Math.max(1, Math.ceil(step.meters * (1 - sim.progress)));
@@ -243,12 +315,18 @@ export default function DirectionsScreen() {
     <View style={styles.root}>
       <LiveNotice />
       {evac && <ExitClaimer exitNodeId={evacExit?.nodeId} />}
-      {realWalk && (stepSensor === 'denied' || stepSensor === 'unavailable') && (
+      {realWalk && (livePos.stepSensor === 'denied' || livePos.stepSensor === 'unavailable') && (
         <View style={styles.sensorNote} pointerEvents="none">
-          <Text style={styles.sensorNoteText}>{t(stepSensor === 'denied' ? 'walk.denied' : 'walk.unavailable')}</Text>
+          <Text style={styles.sensorNoteText}>{t(livePos.stepSensor === 'denied' ? 'walk.denied' : 'walk.unavailable')}</Text>
         </View>
       )}
-      <TripTracker tripKey={routeKey(evac, startNodeId, destId, 0)} evac={evac} destId={destId} arrived={arrived && legIndex === (legs?.length ?? 1) - 1} />
+      {realWalk && livePos.stepSensor === 'ready' && (livePos.compass === 'denied' || livePos.compass === 'unavailable') && (
+        <View style={styles.sensorNote} pointerEvents="none">
+          <Text style={styles.sensorNoteText}>{t('walk.noCompass')}</Text>
+        </View>
+      )}
+      <RerouteBanner at={reroutedAt} />
+      <TripTracker tripKey={routeKey(evac, from, destId, 0)} evac={evac} destId={destId} arrived={arrived && legIndex === (legs?.length ?? 1) - 1} />
       {!evac && <RoutePromo routeNodeIds={routeNodeIds} destStoreId={destId} from={startNodeId} />}
       <VoiceGuide
         speakKey={`${routeKey(evac, startNodeId, destId, legIndex)}:${current}:${arrived ? 'end' : 'go'}`}
@@ -396,11 +474,12 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
       </View>
 
       <View style={[styles.sideRight, { top: insets.top + 150 + (evac ? 70 : 0) }]} pointerEvents="box-none">
+        {realWalk && <Text style={styles.floorTitle}>{t('walk.iAmOnFloor')}</Text>}
         <View style={styles.floorColumn}>
           {[...venue.floors].reverse().map((fl) => {
             const f = fl.id;
             const label = floorLabel(fl.id);
-            const on = f === viewFloor;
+            const on = f === (realWalk ? (livePos.floorId ?? viewFloor) : viewFloor);
             return (
               <Pressable
                 key={f}
@@ -408,6 +487,8 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
                 accessibilityState={{ selected: on }}
                 accessibilityLabel={t('map.floor', { floor: label })}
                 onPress={() => {
+                  // Height is manual: while walking for real, picking a floor also says "I am on this floor".
+                  if (realWalk) livePos.setFloor(f);
                   setViewFloorId(f);
                   setFocus('follow');
                 }}
@@ -471,8 +552,13 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
           style={[styles.simBtn, realWalk && { backgroundColor: BLUE }]}>
           <MaterialIcons name="directions-walk" size={22} color={realWalk ? '#FFFFFF' : BLUE} />
         </Pressable>
+        {realWalk && livePos.compass === 'ready' && (
+          <Pressable accessibilityRole="button" accessibilityLabel={t('walk.calibrate')} onPress={livePos.calibrate} hitSlop={6} style={styles.simBtn}>
+            <MaterialIcons name="explore" size={22} color={BLUE} />
+          </Pressable>
+        )}
         {realWalk && !sim.finished && (
-          <Pressable accessibilityRole="button" accessibilityLabel={t('walk.tapSteps')} onPress={() => sim.advance((TAP_STEPS * STRIDE_METERS) / metersPerPixelOf(routeFloorId))} hitSlop={6} style={styles.simBtn}>
+          <Pressable accessibilityRole="button" accessibilityLabel={t('walk.tapSteps')} onPress={() => livePos.addSteps(TAP_STEPS, expectedBearing)} hitSlop={6} style={styles.simBtn}>
             <Text style={styles.speedText}>{`+${TAP_STEPS}`}</Text>
           </Pressable>
         )}
@@ -641,6 +727,7 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, ACTIVE_BG, CANVAS, CARD }: Color
     borderColor: BORDER,
     ...shadow,
   },
+  floorTitle: { alignSelf: 'center', fontSize: 10, fontWeight: '700', color: '#FFFFFF', backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, overflow: 'hidden', marginBottom: 6, maxWidth: 70, textAlign: 'center' },
   floorItem: {
     width: 40,
     height: 40,

@@ -233,5 +233,9 @@
   "offers.go": "Directions",
   "parking.save": "Save current position as my parking spot",
   "parking.goBack": "Directions back to my car (long press to clear)",
-  "parking.label": "Your car"
+  "parking.label": "Your car",
+  "walk.iAmOnFloor": "I am on floor",
+  "walk.noCompass": "Compass unavailable. The dot will follow the route direction.",
+  "walk.calibrate": "Calibrate direction: face along the route, then tap",
+  "walk.rerouted": "You went off route. The shortest path was recalculated."
 }

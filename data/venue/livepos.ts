@@ -221,3 +221,32 @@ export function routeEdgeSet(nodeIds: string[], floorOf: (id: string) => string 
   }
   return set;
 }
+
+export type RouteTracker = { bestAlong: number; offCount: number };
+
+export type TrackThresholds = { offRouteM: number; reverseM: number; arriveM: number; offSamples: number };
+
+export type TrackResult =
+  | { action: 'follow'; along: number }
+  | { action: 'reroute'; reason: 'off' | 'reverse' }
+  | { action: 'wait' };
+
+/**
+ * Compares the live position with the planned route of the current floor and says what to do:
+ * follow it (the marker's progress along the route), plan again because the person went off it for a couple of samples,
+ * or because they walked back along it, or wait while a single noisy sample is judged. `state` is updated in place.
+ */
+export function trackOnRoute(corners: Pt[], point: Pt, metersPerPixel: number, state: RouteTracker, limits: TrackThresholds): TrackResult {
+  const projection = projectOnPolyline(corners, point);
+  if (!projection) return { action: 'wait' };
+  const total = corners.reduce((sum, c, i) => (i === 0 ? 0 : sum + dist(corners[i - 1], c)), 0);
+  if (projection.offset * metersPerPixel > limits.offRouteM) {
+    state.offCount += 1;
+    return state.offCount >= limits.offSamples ? { action: 'reroute', reason: 'off' } : { action: 'wait' };
+  }
+  state.offCount = 0;
+  if (state.bestAlong - projection.along > limits.reverseM / metersPerPixel) return { action: 'reroute', reason: 'reverse' };
+  state.bestAlong = Math.max(state.bestAlong, projection.along);
+  const arrived = projection.along >= total - limits.arriveM / metersPerPixel;
+  return { action: 'follow', along: arrived ? total : projection.along };
+}

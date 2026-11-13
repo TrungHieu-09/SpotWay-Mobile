@@ -233,5 +233,9 @@
   "offers.go": "Chỉ đường",
   "parking.save": "Lưu vị trí hiện tại làm chỗ đỗ xe",
   "parking.goBack": "Dẫn đường về chỗ đỗ xe (nhấn giữ để xoá)",
-  "parking.label": "Chỗ đỗ xe của bạn"
+  "parking.label": "Chỗ đỗ xe của bạn",
+  "walk.iAmOnFloor": "Tôi đang ở tầng",
+  "walk.noCompass": "Không đọc được la bàn. Chấm vị trí sẽ đi theo hướng của tuyến đường.",
+  "walk.calibrate": "Hiệu chỉnh hướng: quay mặt theo hướng đi của tuyến rồi bấm",
+  "walk.rerouted": "Bạn đi lệch hướng. Đã tính lại đường đi ngắn nhất."
 }
