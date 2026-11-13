@@ -198,5 +198,8 @@
   "evac.gateHint": "Không dùng thang máy hay thang cuốn. Đi theo chỉ dẫn tới lối thoát gần nhất.",
   "evac.gateDismiss": "Tôi đã biết",
   "voice.on": "Tắt đọc hướng dẫn bằng giọng nói",
-  "voice.off": "Bật đọc hướng dẫn bằng giọng nói"
+  "voice.off": "Bật đọc hướng dẫn bằng giọng nói",
+  "promo.near": "Ưu đãi gần bạn: {{store}}",
+  "promo.meters": "cách tuyến {{count}} m",
+  "promo.close": "Đóng gợi ý ưu đãi"
 }

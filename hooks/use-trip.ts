@@ -11,8 +11,8 @@ export const routeKey = (evac: boolean, startNodeId: string | undefined, destId:
 
 /**
  * The route the user is following, computed on the phone from the venue data: to a picked
- * destination, or (evac) to the nearest safe exit. Re-computed when the accessibility mode or
- * the simulated incident changes.
+ * destination, or (evac) to the nearest safe exit. Re-computed when the accessibility mode,
+ * the blocked paths or an incident change.
  */
 export function useTrip({ to, from, evac }: { to?: string; from?: string; evac: boolean }) {
   const venue = useVenue();
@@ -28,7 +28,7 @@ export function useTrip({ to, from, evac }: { to?: string; from?: string; evac: 
     [from, venue.status],
   );
 
-  const trip: Trip | null = useMemo(() => {
+  const planned: { trip: Trip; nodeIds: string[] } | null = useMemo(() => {
     if (venue.status !== 'ready' || !startNodeId) return null;
     const destination = evac ? undefined : venue.destinations.find((d) => d.id === to);
     if (!evac && !destination) return null;
@@ -38,13 +38,16 @@ export function useTrip({ to, from, evac }: { to?: string; from?: string; evac: 
     if (!result.route) return null;
     const lastNode = nodeById(result.route.nodeIds[result.route.nodeIds.length - 1]);
     const name = evac ? (lastNode?.name ?? 'Lối thoát') : destination!.name;
-    return tripFromRoute(result.route, name, {
-      evacuation: evac || result.effectiveMode === 'EVACUATION',
-      destinationCancelled: result.destinationCancelled,
-      warningCode: result.warningCode,
-    });
+    return {
+      nodeIds: result.route.nodeIds,
+      trip: tripFromRoute(result.route, name, {
+        evacuation: evac || result.effectiveMode === 'EVACUATION',
+        destinationCancelled: result.destinationCancelled,
+        warningCode: result.warningCode,
+      }),
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [venue.status, venue.fireNodeIds, venue.remoteIncident, venue.blockedEdgeIds, startNodeId, to, evac, accessible, incident]);
 
-  return { venue, trip, startNodeId, accessible, incident };
+  return { venue, trip: planned?.trip ?? null, routeNodeIds: planned?.nodeIds ?? null, startNodeId, accessible, incident };
 }

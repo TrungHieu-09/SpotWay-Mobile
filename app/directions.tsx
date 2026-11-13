@@ -22,6 +22,7 @@ import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
 import { LiveNotice } from '@/components/live-notice';
+import { RoutePromo } from '@/components/route-promo';
 import { VoiceGuide } from '@/components/voice-guide';
 import { routeKey, useTrip } from '@/hooks/use-trip';
 import { simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
@@ -69,7 +70,7 @@ export default function DirectionsScreen() {
   const destId = to ?? dest ?? '';
 
   // One leg per floor, joined by 'transfer' steps; computed on the phone by the routing engine.
-  const { venue, trip, startNodeId, incident } = useTrip({ to: destId, from, evac });
+  const { venue, trip, routeNodeIds, startNodeId, incident } = useTrip({ to: destId, from, evac });
   const mapTextScale = 1 + (useTextScale() - 1) * 0.5;
   void mapTextScale;
   const legs = trip?.legs ?? null;
@@ -226,6 +227,7 @@ export default function DirectionsScreen() {
   return (
     <View style={styles.root}>
       <LiveNotice />
+      {!evac && <RoutePromo routeNodeIds={routeNodeIds} destStoreId={destId} from={startNodeId} />}
       <VoiceGuide
         speakKey={`${routeKey(evac, startNodeId, destId, legIndex)}:${current}:${arrived ? 'end' : 'go'}`}
         text={arrived ? (evac ? t('evac.safeTitle') : `${t('dir.arrived')}. ${destName}`) : `${stepHeadline(t, step)}. ${sub}`}

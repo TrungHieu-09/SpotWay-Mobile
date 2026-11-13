@@ -91,6 +91,17 @@ export type PublicStore = {
   images?: string[] | null
 }
 
+export type BuildingPromotion = {
+  id: string
+  title: string
+  description?: string | null
+  endAt: string
+  storeId: string
+  storeName: string
+  floorId: string
+  nodeId: string
+}
+
 export type PublicPromotion = {
   id: string
   title: string

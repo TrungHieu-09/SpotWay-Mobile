@@ -19,6 +19,7 @@ import {
 import type {
   IndoorRoute,
   PublicFloor,
+  BuildingPromotion,
   PublicFloorMap,
   PublicPromotion,
   PublicQrResolution,
@@ -132,6 +133,8 @@ export type VenueState = {
   notice?: { id: number; kind: 'blocked' | 'reopened' | 'offline'; count: number };
   /** True when the data comes from the last saved copy because the backend could not be reached. */
   offline?: boolean;
+  /** Promotions running now in the building (best effort: empty when none or unavailable). */
+  promotions: BuildingPromotion[];
   /** Emergency raised by the building staff (polled from the backend). */
   remoteIncident?: RemoteIncident;
   /** Last node the user is known to stand at (scan or start point); where an evacuation starts from. */
@@ -150,6 +153,7 @@ let state: VenueState = {
   verticalLinks: [],
   fireNodeIds: [],
   blockedEdgeIds: [],
+  promotions: [],
 };
 const listeners = new Set<() => void>();
 const setState = (patch: Partial<VenueState>) => {
@@ -217,6 +221,7 @@ export function loadVenue(force = false): Promise<void> {
       };
       setState({ status: 'ready', offline: false, ...fresh });
       void saveSnapshot(fresh);
+      void refreshPromotions();
     } catch (e) {
       const cached = await readSnapshot();
       if (cached) {
@@ -266,6 +271,39 @@ export async function refreshMaps(): Promise<void> {
   } finally {
     refreshing = false;
   }
+}
+
+/** Reloads the running promotions; a failure keeps what is already known. */
+export async function refreshPromotions(): Promise<void> {
+  try {
+    const list = await request<BuildingPromotion[]>(`/public/buildings/${BUILDING_ID}/promotions`, undefined, 10_000);
+    if (JSON.stringify(list.map((p) => p.id)) !== JSON.stringify(state.promotions.map((p) => p.id))) setState({ promotions: list });
+  } catch {
+    // Promotions are a bonus; never block the map on them.
+  }
+}
+
+/** Promotions of stores close to a route (same floor, within `maxMeters` of any node of it), nearest first. */
+export function promotionsAlong(routeNodeIds: string[], excludeStoreId?: string, maxMeters = 15): (BuildingPromotion & { meters: number })[] {
+  const nodes = routeNodeIds.map(nodeById).filter((n): n is NonNullable<ReturnType<typeof nodeById>> => !!n);
+  const out: (BuildingPromotion & { meters: number })[] = [];
+  const seen = new Set<string>();
+  for (const promo of state.promotions) {
+    if (promo.storeId === excludeStoreId || seen.has(promo.storeId)) continue;
+    const target = nodeById(promo.nodeId);
+    if (!target) continue;
+    const mpp = metersPerPixelOf(target.floorId);
+    let best = Infinity;
+    for (const n of nodes) {
+      if (n.floorId !== target.floorId) continue;
+      best = Math.min(best, Math.hypot(n.x - target.x, n.y - target.y) * mpp);
+    }
+    if (best <= maxMeters) {
+      seen.add(promo.storeId);
+      out.push({ ...promo, meters: Math.round(best) });
+    }
+  }
+  return out.sort((a, b) => a.meters - b.meters);
 }
 
 /** Polls the emergency state. A failed poll keeps the last known state: never clear an alarm because the network blinked. */

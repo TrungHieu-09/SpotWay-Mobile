@@ -198,5 +198,8 @@
   "evac.gateHint": "Do not use elevators or escalators. Follow the directions to the nearest exit.",
   "evac.gateDismiss": "Dismiss",
   "voice.on": "Turn off spoken directions",
-  "voice.off": "Turn on spoken directions"
+  "voice.off": "Turn on spoken directions",
+  "promo.near": "Offer near you: {{store}}",
+  "promo.meters": "{{count}} m off your route",
+  "promo.close": "Dismiss offer"
 }
