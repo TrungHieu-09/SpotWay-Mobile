@@ -19,11 +19,11 @@ export function TripTracker({ tripKey, evac, destId, arrived }: Props) {
     startedAt.current = Date.now();
     completedFor.current = undefined;
     if (evac) trackEvent('EVACUATION_STARTED');
-    else if (destId) trackEvent('ROUTE_STARTED', { targetId: destId });
+    else if (destId && !destId.startsWith('node:')) trackEvent('ROUTE_STARTED', { targetId: destId });
   }, [tripKey, evac, destId]);
 
   useEffect(() => {
-    if (!arrived || evac || !destId || completedFor.current === tripKey) return;
+    if (!arrived || evac || !destId || destId.startsWith('node:') || completedFor.current === tripKey) return;
     completedFor.current = tripKey;
     trackEvent('ROUTE_COMPLETED', { targetId: destId, durationSeconds: Math.round((Date.now() - startedAt.current) / 1000) });
   }, [arrived, evac, destId, tripKey]);

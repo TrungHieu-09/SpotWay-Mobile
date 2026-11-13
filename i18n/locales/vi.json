@@ -225,5 +225,13 @@
   "walk.denied": "Chưa cấp quyền cảm biến bước chân. Dùng nút +3 để thêm bước, hoặc cấp quyền trong Cài đặt.",
   "walk.unavailable": "Máy không có cảm biến bước chân. Dùng nút +3 để thêm bước.",
   "evac.exitNearest": "Lối thoát: {{name}} ({{count}} người khác cùng hướng)",
-  "evac.exitSpread": "Lối thoát: {{name}}, chọn để tránh đông ({{count}} người khác cùng hướng)"
+  "evac.exitSpread": "Lối thoát: {{name}}, chọn để tránh đông ({{count}} người khác cùng hướng)",
+  "offers.open": "Xem ưu đãi đang diễn ra",
+  "offers.title": "Ưu đãi đang diễn ra",
+  "offers.empty": "Hiện chưa có ưu đãi nào",
+  "offers.viewStore": "Xem cửa hàng",
+  "offers.go": "Chỉ đường",
+  "parking.save": "Lưu vị trí hiện tại làm chỗ đỗ xe",
+  "parking.goBack": "Dẫn đường về chỗ đỗ xe (nhấn giữ để xoá)",
+  "parking.label": "Chỗ đỗ xe của bạn"
 }

@@ -225,5 +225,13 @@
   "walk.denied": "Step counter permission is off. Use the +3 button, or grant it in Settings.",
   "walk.unavailable": "This device has no step counter. Use the +3 button.",
   "evac.exitNearest": "Exit: {{name}} ({{count}} others heading there)",
-  "evac.exitSpread": "Exit: {{name}}, chosen to avoid crowding ({{count}} others heading there)"
+  "evac.exitSpread": "Exit: {{name}}, chosen to avoid crowding ({{count}} others heading there)",
+  "offers.open": "See current offers",
+  "offers.title": "Current offers",
+  "offers.empty": "No offers right now",
+  "offers.viewStore": "View store",
+  "offers.go": "Directions",
+  "parking.save": "Save current position as my parking spot",
+  "parking.goBack": "Directions back to my car (long press to clear)",
+  "parking.label": "Your car"
 }

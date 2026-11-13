@@ -25,7 +25,7 @@ type Planned = { trip: Trip; nodeIds: string[]; exit?: EvacExit };
  * destination, or (evac) to the exit that is best for this person and the crowd. Re-computed when the
  * accessibility mode, the blocked paths, an incident or the exit crowding change.
  */
-export function useTrip({ to, from, evac }: { to?: string; from?: string; evac: boolean }) {
+export function useTrip({ to, from, evac, label }: { to?: string; from?: string; evac: boolean; label?: string }) {
   const venue = useVenue();
   useEffect(() => {
     loadVenue();
@@ -58,7 +58,8 @@ export function useTrip({ to, from, evac }: { to?: string; from?: string; evac: 
       }
     }
     if (!next) {
-      const destination = evac ? undefined : venue.destinations.find((d) => d.id === to);
+      // `node:<id>` targets a plain node (e.g. the saved parking spot) instead of a store / POI.
+      const destination = evac ? undefined : to?.startsWith('node:') ? { id: to, nodeId: to.slice(5), name: label ?? nodeById(to.slice(5))?.name ?? '' } : venue.destinations.find((d) => d.id === to);
       if (!evac && !destination) return null;
       const result = computeRoute(startNodeId, evac ? { findNearestExit: true } : destination!.nodeId, { wheelchair: accessible });
       if (!result.route) return null;
@@ -83,7 +84,7 @@ export function useTrip({ to, from, evac }: { to?: string; from?: string; evac: 
     previous.current = next;
     return next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [venue.status, venue.fireNodeIds, venue.remoteIncident, venue.blockedEdgeIds, venue.evacLoads, startNodeId, to, evac, accessible, incident]);
+  }, [venue.status, venue.fireNodeIds, venue.remoteIncident, venue.blockedEdgeIds, venue.evacLoads, startNodeId, to, evac, label, accessible, incident]);
 
   return { venue, trip: planned?.trip ?? null, routeNodeIds: planned?.nodeIds ?? null, evacExit: planned?.exit ?? null, startNodeId, accessible, incident };
 }

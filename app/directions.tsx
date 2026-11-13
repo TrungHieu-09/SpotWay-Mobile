@@ -66,20 +66,22 @@ export default function DirectionsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
-  const { to, dest, from, mode, queue } = useLocalSearchParams<{
+  const { to, dest, from, mode, queue, label } = useLocalSearchParams<{
     to?: string;
     dest?: string;
     from?: string;
     mode?: string;
     /** Remaining stops of a multi-stop trip (comma separated destination ids). */
     queue?: string;
+    /** Display name for a `node:` target such as the parking spot. */
+    label?: string;
   }>();
   const evac = mode === 'evac';
   const destId = to ?? dest ?? '';
   const [nextStopId, ...restQueue] = (queue ?? '').split(',').filter(Boolean);
 
   // One leg per floor, joined by 'transfer' steps; computed on the phone by the routing engine.
-  const { venue, trip, routeNodeIds, evacExit, startNodeId, incident } = useTrip({ to: destId, from, evac });
+  const { venue, trip, routeNodeIds, evacExit, startNodeId, incident } = useTrip({ to: destId, from, evac, label });
   const mapTextScale = 1 + (useTextScale() - 1) * 0.5;
   void mapTextScale;
   const legs = trip?.legs ?? null;

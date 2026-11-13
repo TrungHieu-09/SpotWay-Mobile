@@ -30,6 +30,7 @@ import {
 import { useAccessibilityMode } from '@/hooks/use-accessibility-mode';
 import { LiveNotice } from '@/components/live-notice';
 import { useIncident } from '@/hooks/use-incident';
+import { saveParking, useParking } from '@/hooks/use-parking';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 
 import { useColors, type Colors } from '@/hooks/use-colors';
@@ -102,6 +103,7 @@ export default function FloorMapScreen() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [accessible] = useAccessibilityMode();
   const [incident] = useIncident();
+  const parking = useParking();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const floatBottom = TAB_BAR_HEIGHT + insets.bottom + FLOAT_GAP;
@@ -415,9 +417,30 @@ export default function FloorMapScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={t('offers.open')}
+            onPress={() => router.push({ pathname: '/offers' as never, params: { from: startNodeId } })}
+            style={styles.iconBtn}>
+            <MaterialIcons name="local-offer" size={20} color={venue.promotions.length ? '#E8590C' : MUTED} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t(parking ? 'parking.goBack' : 'parking.save')}
+            onPress={() => {
+              if (parking) {
+                router.push({ pathname: '/directions', params: { to: `node:${parking.nodeId}`, from: startNodeId, label: t('parking.label') } });
+              } else if (startNodeId && startNode) {
+                saveParking({ nodeId: startNodeId, floorId: startNode.floorId, label: t('parking.label'), savedAt: Date.now() });
+              }
+            }}
+            onLongPress={() => saveParking(null)}
+            style={styles.iconBtn}>
+            <MaterialIcons name="local-parking" size={20} color={parking ? BLUE : MUTED} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel={t('multi.open')}
             onPress={() => router.push({ pathname: '/trip-planner' as never, params: { from: startNodeId } })}
-            style={styles.floorBtn}>
+            style={styles.iconBtn}>
             <MaterialIcons name="checklist" size={20} color={MUTED} />
           </Pressable>
           <Pressable
@@ -697,6 +720,7 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, CANVAS, CARD, ACTIVE_BG, TINT }:
     borderWidth: 1,
     borderColor: BORDER,
   },
+  iconBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: CARD, borderWidth: 1, borderColor: BORDER },
   floorBtnText: { fontSize: 13, fontWeight: '700', color: INK },
   searchRow: { flexDirection: 'row', gap: 8 },
   searchBox: {
