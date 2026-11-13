@@ -19,6 +19,7 @@ import type {
   IndoorRoute,
   PublicFloor,
   PublicFloorMap,
+  PublicPromotion,
   PublicQrResolution,
   PublicSearchResult,
   VerticalLink,
@@ -85,6 +86,16 @@ async function searchAll(buildingId: string): Promise<PublicSearchResult[]> {
   );
   return parts.flat().sort((a, b) => a.name.localeCompare(b.name, 'vi'));
 }
+
+/** Promotions currently running at a store (empty when none or on any error: they are a bonus, never blocking). */
+export const getStorePromotions = (storeId: string) =>
+  request<PublicPromotion[]>(`/public/stores/${encodeURIComponent(storeId)}/promotions`, undefined, 10_000).catch(() => [] as PublicPromotion[]);
+
+/** Store record (description, logo, images) of a destination, when it is a store. */
+export const storeById = (id: string) =>
+  Object.values(state.mapsByFloorId)
+    .flatMap((m) => m.stores)
+    .find((s) => s.id === id);
 
 /** Resolve a scanned QR token to the node the user is standing at. */
 export const resolveQrToken = (token: string) =>

@@ -86,6 +86,17 @@ export type PublicStore = {
   nodeId: string | null
   name: string
   status: string
+  description?: string | null
+  logoUrl?: string | null
+  images?: string[] | null
+}
+
+export type PublicPromotion = {
+  id: string
+  title: string
+  description?: string | null
+  startAt: string
+  endAt: string
 }
 
 export type PublicPoi = {

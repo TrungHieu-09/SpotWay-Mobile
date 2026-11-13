@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { Image } from 'expo-image';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +9,8 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { EmptyState } from '@/components/empty-state';
 import { Text } from '@/components/scaled-text';
 import { placesOf, type PlaceCategory } from '@/data/venue/places';
-import { defaultStartNodeId, loadVenue, nodeById, plainRoute, useVenue } from '@/data/venue/venue';
+import type { PublicPromotion } from '@/data/venue/types';
+import { defaultStartNodeId, getStorePromotions, loadVenue, nodeById, plainRoute, storeById, useVenue } from '@/data/venue/venue';
 
 import { useColors, type Colors } from '@/hooks/use-colors';
 import { useFavorites } from '@/hooks/use-favorites';
@@ -50,6 +52,17 @@ export default function StoreDetailScreen() {
   }, []);
   const store = useMemo(() => placesOf(venue).find((p) => p.id === id) ?? null, [venue, id]);
   const floor = store?.floor ?? '';
+  const details = useMemo(() => (id ? storeById(id) : undefined), [id, venue]);
+  const photo = details?.images?.[0] ?? details?.logoUrl ?? null;
+  const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
+  useEffect(() => {
+    let alive = true;
+    setPromotions([]);
+    if (id && details) void getStorePromotions(id).then((list) => alive && setPromotions(list));
+    return () => {
+      alive = false;
+    };
+  }, [id, details]);
   const meters = useMemo(() => {
     const start = from && nodeById(from) ? from : defaultStartNodeId();
     if (!store || !start) return null;
@@ -98,7 +111,11 @@ export default function StoreDetailScreen() {
     <View style={styles.root}>
       <ScrollView contentContainerStyle={{ paddingBottom: 120 + insets.bottom }}>
         <View style={styles.hero}>
-          <MaterialIcons name={icon} size={120} color="rgba(255,255,255,0.16)" />
+          {photo ? (
+            <Image source={{ uri: photo }} contentFit="cover" style={StyleSheet.absoluteFill} accessibilityIgnoresInvertColors />
+          ) : (
+            <MaterialIcons name={icon} size={120} color="rgba(255,255,255,0.16)" />
+          )}
           <View style={styles.heroShade} />
           <Pressable
             accessibilityRole="button"
@@ -150,6 +167,28 @@ export default function StoreDetailScreen() {
             <Text style={styles.cardValue}>{category}</Text>
           </View>
         </View>
+
+        {details?.description ? (
+          <View style={styles.block}>
+            <Text style={styles.desc}>{details.description}</Text>
+          </View>
+        ) : null}
+
+        {promotions.length > 0 ? (
+          <View style={styles.block}>
+            <View style={styles.cardLabelRow}>
+              <MaterialIcons name="local-offer" size={18} color={BLUE} />
+              <Text style={styles.promoHeading}>{t('store.promotions')}</Text>
+            </View>
+            {promotions.map((promo) => (
+              <View key={promo.id} style={styles.promo}>
+                <Text style={styles.promoTitle}>{promo.title}</Text>
+                {promo.description ? <Text style={styles.desc}>{promo.description}</Text> : null}
+                <Text style={styles.promoDates}>{t('store.promoUntil', { date: new Date(promo.endAt).toLocaleDateString() })}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
 
       </ScrollView>
 
@@ -239,7 +278,11 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, BG, CARD, SURFACE, OPEN_BG, OPEN
   cardLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
   cardLabel: { fontSize: 11, fontWeight: '800', color: '#434751' },
   cardValue: { fontSize: 16, fontWeight: '800', color: INK },
-  desc: { fontSize: 14, lineHeight: 22, color: '#434751' },
+  desc: { fontSize: 14, lineHeight: 22, color: MUTED },
+  promoHeading: { fontSize: 16, fontWeight: '700', color: INK },
+  promo: { marginTop: 10, padding: 14, borderRadius: 12, backgroundColor: OPEN_BG, gap: 4 },
+  promoTitle: { fontSize: 15, fontWeight: '700', color: OPEN_FG },
+  promoDates: { fontSize: 12, color: MUTED },
   empty: { padding: 24, textAlign: 'center', color: MUTED },
   footer: {
     position: 'absolute',
