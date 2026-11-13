@@ -203,5 +203,10 @@
   "promo.meters": "cách tuyến {{count}} m",
   "promo.close": "Đóng gợi ý ưu đãi",
   "welcome.skip": "Chưa có mã QR? Bắt đầu từ sảnh chính",
-  "dir.speed": "Tốc độ mô phỏng {{speed}} lần"
+  "dir.speed": "Tốc độ mô phỏng {{speed}} lần",
+  "route3d.open": "Xem tuyến xuyên tầng 3D",
+  "route3d.title": "Tuyến đi xuyên các tầng",
+  "route3d.floors": "{{count}} tầng",
+  "route3d.transfers": "{{count}} lần chuyển tầng",
+  "route3d.hint": "Chạm vào một tầng để làm nổi bật. Chấm xanh là điểm xuất phát."
 }

@@ -439,6 +439,14 @@ export default function DirectionsScreen() {
             <MaterialIcons name={sim.playing ? 'pause' : 'play-arrow'} size={22} color={BLUE} />
           </Pressable>
         )}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('route3d.open')}
+          onPress={() => router.push({ pathname: '/route-3d' as never, params: { to: destId, from: startNodeId, mode } })}
+          hitSlop={6}
+          style={styles.simBtn}>
+          <MaterialIcons name="layers" size={22} color={BLUE} />
+        </Pressable>
         {!sim.finished && (
           <Pressable
             accessibilityRole="button"

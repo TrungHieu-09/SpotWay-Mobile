@@ -203,5 +203,10 @@
   "promo.meters": "{{count}} m off your route",
   "promo.close": "Dismiss offer",
   "welcome.skip": "No QR code? Start at the main entrance",
-  "dir.speed": "Simulation speed {{speed}}x"
+  "dir.speed": "Simulation speed {{speed}}x",
+  "route3d.open": "View route across floors in 3D",
+  "route3d.title": "Route across floors",
+  "route3d.floors": "{{count}} floors",
+  "route3d.transfers": "{{count}} floor changes",
+  "route3d.hint": "Tap a floor to highlight it. The green dot is where you start."
 }
