@@ -22,6 +22,7 @@ import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
 import { LiveNotice } from '@/components/live-notice';
+import { VoiceGuide } from '@/components/voice-guide';
 import { routeKey, useTrip } from '@/hooks/use-trip';
 import { simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
 
@@ -225,6 +226,10 @@ export default function DirectionsScreen() {
   return (
     <View style={styles.root}>
       <LiveNotice />
+      <VoiceGuide
+        speakKey={`${routeKey(evac, startNodeId, destId, legIndex)}:${current}:${arrived ? 'end' : 'go'}`}
+        text={arrived ? (evac ? t('evac.safeTitle') : `${t('dir.arrived')}. ${destName}`) : `${stepHeadline(t, step)}. ${sub}`}
+      />
       <View style={StyleSheet.absoluteFill}>
         {viewFloorObj ? (
           <FloorCanvas

@@ -196,5 +196,7 @@
   "evac.gateTitle": "CẢNH BÁO CHÁY",
   "evac.gateBody": "Có sự cố cháy trong toà nhà. Hãy rời đi ngay.",
   "evac.gateHint": "Không dùng thang máy hay thang cuốn. Đi theo chỉ dẫn tới lối thoát gần nhất.",
-  "evac.gateDismiss": "Tôi đã biết"
+  "evac.gateDismiss": "Tôi đã biết",
+  "voice.on": "Tắt đọc hướng dẫn bằng giọng nói",
+  "voice.off": "Bật đọc hướng dẫn bằng giọng nói"
 }

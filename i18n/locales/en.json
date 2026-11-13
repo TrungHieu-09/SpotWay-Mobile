@@ -196,5 +196,7 @@
   "evac.gateTitle": "FIRE ALERT",
   "evac.gateBody": "There is a fire in the building. Leave now.",
   "evac.gateHint": "Do not use elevators or escalators. Follow the directions to the nearest exit.",
-  "evac.gateDismiss": "Dismiss"
+  "evac.gateDismiss": "Dismiss",
+  "voice.on": "Turn off spoken directions",
+  "voice.off": "Turn on spoken directions"
 }
