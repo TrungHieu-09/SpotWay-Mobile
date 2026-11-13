@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/empty-state';
 import { Text } from '@/components/scaled-text';
 import { placesOf, type PlaceCategory } from '@/data/venue/places';
 import type { PublicPromotion } from '@/data/venue/types';
-import { defaultStartNodeId, getStorePromotions, loadVenue, nodeById, plainRoute, storeById, useVenue } from '@/data/venue/venue';
+import { defaultStartNodeId, getStorePromotions, loadVenue, nodeById, plainRoute, useVenue } from '@/data/venue/venue';
 
 import { useColors, type Colors } from '@/hooks/use-colors';
 import { useFavorites } from '@/hooks/use-favorites';
@@ -52,7 +52,10 @@ export default function StoreDetailScreen() {
   }, []);
   const store = useMemo(() => placesOf(venue).find((p) => p.id === id) ?? null, [venue, id]);
   const floor = store?.floor ?? '';
-  const details = useMemo(() => (id ? storeById(id) : undefined), [id, venue]);
+  const details = useMemo(
+    () => (id ? Object.values(venue.mapsByFloorId).flatMap((m) => m.stores).find((x) => x.id === id) : undefined),
+    [id, venue.mapsByFloorId],
+  );
   const photo = details?.images?.[0] ?? details?.logoUrl ?? null;
   const [promotions, setPromotions] = useState<PublicPromotion[]>([]);
   useEffect(() => {
