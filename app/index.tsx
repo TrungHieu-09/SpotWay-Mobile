@@ -28,10 +28,11 @@ export default function WelcomeScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <View>
-            <View style={styles.brandRow}>
+            {/* Long-press the logo to open the demo scenarios panel. */}
+            <Pressable accessible={false} delayLongPress={600} onLongPress={() => router.push('/demo-scenarios' as never)} style={styles.brandRow}>
               <Text style={styles.brand}>SpotWay</Text>
               <View style={styles.brandDot} />
-            </View>
+            </Pressable>
             <Text style={styles.tagline}>{t('welcome.tagline')}</Text>
           </View>
           <Pressable

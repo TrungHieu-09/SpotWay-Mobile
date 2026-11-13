@@ -100,12 +100,12 @@ export const storeById = (id: string) =>
     .flatMap((m) => m.stores)
     .find((s) => s.id === id);
 
-export type TrackedEvent = 'SEARCH_PERFORMED' | 'ROUTE_STARTED' | 'ROUTE_COMPLETED' | 'EVACUATION_STARTED' | 'STORE_VIEWED';
+export type TrackedEvent = 'SEARCH_PERFORMED' | 'ROUTE_STARTED' | 'ROUTE_COMPLETED' | 'EVACUATION_STARTED' | 'STORE_VIEWED' | 'HELP_REQUESTED' | 'SAFE_REACHED';
 
 /** Anonymous usage event for the owner's analytics. Fire and forget: it never blocks or breaks the app. */
 export function trackEvent(
   eventType: TrackedEvent,
-  extra: { targetId?: string; floorId?: string; query?: string; resultCount?: number; durationSeconds?: number } = {},
+  extra: { targetId?: string; floorId?: string; query?: string; resultCount?: number; durationSeconds?: number; helpKind?: 'LOST' | 'WHEELCHAIR' | 'SMOKE' | 'OTHER'; nodeId?: string } = {},
 ): void {
   request<unknown>('/public/events', { method: 'POST', body: JSON.stringify({ eventType, buildingId: BUILDING_ID, ...extra }) }, 6_000).catch(() => undefined);
 }
@@ -146,6 +146,10 @@ export type VenueState = {
   offline?: boolean;
   /** Promotions running now in the building (best effort: empty when none or unavailable). */
   promotions: BuildingPromotion[];
+  /** Closures in force (demo scenarios): their nodes are removed from the walkable graph without declaring an emergency. */
+  scenarios: Scenario[];
+  /** Message of the building shown to every guest. */
+  announcement?: Announcement;
   /** Emergency raised by the building staff (polled from the backend). */
   remoteIncident?: RemoteIncident;
   /** Other phones heading to each exit (exit node id -> count), so evacuees can be spread over the exits. */
@@ -153,6 +157,17 @@ export type VenueState = {
   /** Last node the user is known to stand at (scan or start point); where an evacuation starts from. */
   userNodeId?: string;
 };
+
+/** A closure announced by the building (lift out of order, power cut, zone closed): routes must avoid these nodes. */
+export type Scenario = {
+  kind: 'elevator' | 'power' | 'zone';
+  /** Nodes that cannot be used while the scenario lasts. */
+  blockedNodeIds: string[];
+  /** Name of the closed place (zone only). */
+  zoneName?: string;
+};
+
+export type Announcement = { id: number; text: string };
 
 export type RemoteIncident = { id: string; type: 'FIRE'; nodeIds: string[]; floorIds: string[]; message: string | null; startedAt: string };
 
@@ -168,6 +183,7 @@ let state: VenueState = {
   blockedEdgeIds: [],
   promotions: [],
   evacLoads: {},
+  scenarios: [],
 };
 const listeners = new Set<() => void>();
 const setState = (patch: Partial<VenueState>) => {
@@ -397,6 +413,14 @@ export const setUserNode = (id: string | undefined) => {
   if (id && id !== state.userNodeId) setState({ userNodeId: id });
 };
 
+let announcementSeq = 0;
+
+/** Closures in force: a kind appears at most once. Routes are recomputed by the screens when this changes. */
+export const setScenarios = (list: Scenario[]) => setState({ scenarios: list });
+export const addScenario = (scenario: Scenario) => setScenarios([...state.scenarios.filter((s) => s.kind !== scenario.kind), scenario]);
+export const removeScenario = (kind: Scenario['kind']) => setScenarios(state.scenarios.filter((s) => s.kind !== kind));
+export const announce = (text: string | undefined) => setState({ announcement: text?.trim() ? { id: ++announcementSeq, text: text.trim() } : undefined });
+
 export const setFireNodes = (ids: string[]) => setState({ fireNodeIds: ids });
 
 // ---------------------------------------------------------------------------
@@ -445,12 +469,22 @@ export type RouteResult = {
   destinationCancelled?: boolean;
 };
 
+/**
+ * Edges touching a closed node are blocked (the router skips blocked edges). This keeps a closure from being treated as a
+ * fire: a closed shop is simply unreachable instead of turning the route into an evacuation.
+ */
+function closedEdges<E extends { fromNodeId: string; toNodeId: string; status?: 'ACTIVE' | 'BLOCKED' }>(edges: E[]): E[] {
+  const closed = new Set(state.scenarios.flatMap((s) => s.blockedNodeIds));
+  if (closed.size === 0) return edges;
+  return edges.map((e) => (closed.has(e.fromNodeId) || closed.has(e.toNodeId) ? { ...e, status: 'BLOCKED' as const } : e));
+}
+
 function graphInput(opts: RouteOptions) {
   const { floors, mapsByFloorId, verticalLinks, fireNodeIds } = state;
   const fire = [...fireNodeIds, ...(state.remoteIncident?.nodeIds ?? []), ...(opts.avoidNodeIds ?? [])];
   return {
     nodes: nodesWithPoiExits(mapsByFloorId),
-    edges: Object.values(mapsByFloorId).flatMap((m) => m.edges),
+    edges: closedEdges(Object.values(mapsByFloorId).flatMap((m) => m.edges)),
     verticalLinks,
     options: {
       wheelchairMode: !!opts.wheelchair,

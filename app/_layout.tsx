@@ -7,6 +7,7 @@ import 'react-native-reanimated';
 import '@/i18n';
 
 import { EvacuationGate } from '@/components/evacuation-gate';
+import { ScenarioBar } from '@/components/scenario-bar';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -33,7 +34,9 @@ export default function RootLayout() {
         <Stack.Screen name="route-3d" options={{ headerShown: false }} />
         <Stack.Screen name="trip-planner" options={{ headerShown: false }} />
         <Stack.Screen name="offers" options={{ headerShown: false }} />
+        <Stack.Screen name="demo-scenarios" options={{ headerShown: false }} />
       </Stack>
+      <ScenarioBar />
       <EvacuationGate />
       <StatusBar style="auto" />
     </ThemeProvider>

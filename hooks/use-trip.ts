@@ -93,7 +93,7 @@ export function useTrip({ to, from, evac, label }: { to?: string; from?: string;
     previous.current = next;
     return next;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [venue.status, venue.fireNodeIds, venue.remoteIncident, venue.blockedEdgeIds, venue.evacLoads, startNodeId, to, evac, label, accessible, incident]);
+  }, [venue.status, venue.fireNodeIds, venue.remoteIncident, venue.blockedEdgeIds, venue.scenarios, venue.evacLoads, startNodeId, to, evac, label, accessible, incident]);
 
   const measureFrom = (nodeId: string) => buildPlan(nodeId, false)?.trip.totalMeters ?? Infinity;
 

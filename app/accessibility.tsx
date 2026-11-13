@@ -140,9 +140,18 @@ export default function AccessibilityScreen() {
             accessibilityRole="button"
             accessibilityLabel={t('evac.demoOpen')}
             onPress={() => setDemoOpen(true)}
-            style={[styles.row, styles.rowLast]}>
+            style={styles.row}>
             <MaterialIcons name="warning-amber" size={22} color={DANGER} />
             <Text style={styles.rowText}>{t('access.demoRow')}</Text>
+            <MaterialIcons name="chevron-right" size={22} color={MUTED} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('demo.panel.title')}
+            onPress={() => router.push('/demo-scenarios' as never)}
+            style={[styles.row, styles.rowLast]}>
+            <MaterialIcons name="science" size={22} color={MUTED} />
+            <Text style={styles.rowText}>{t('demo.panel.title')}</Text>
             <MaterialIcons name="chevron-right" size={22} color={MUTED} />
           </Pressable>
         </View>

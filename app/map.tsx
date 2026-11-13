@@ -142,7 +142,7 @@ export default function FloorMapScreen() {
         ? computeRoute(startNodeId, destination.nodeId, { wheelchair: accessible })
         : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [startNodeId, destination, accessible, venue.fireNodeIds, venue.status],
+    [startNodeId, destination, accessible, venue.fireNodeIds, venue.scenarios, venue.status],
   );
   const path = useMemo(
     () =>
