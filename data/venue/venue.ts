@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { useSyncExternalStore } from 'react';
 
@@ -128,7 +129,9 @@ export type VenueState = {
   /** Edges the building staff have blocked (maintenance / incident), kept in sync by polling. */
   blockedEdgeIds: string[];
   /** Set when a poll found a change in what is blocked; screens show it briefly. */
-  notice?: { id: number; kind: 'blocked' | 'reopened'; count: number };
+  notice?: { id: number; kind: 'blocked' | 'reopened' | 'offline'; count: number };
+  /** True when the data comes from the last saved copy because the backend could not be reached. */
+  offline?: boolean;
 };
 
 let state: VenueState = {
@@ -157,6 +160,28 @@ export const useVenue = () => useSyncExternalStore(subscribe, getVenue, getVenue
 
 let loading: Promise<void> | null = null;
 
+const CACHE_KEY = `spotway.venue.v1.${BUILDING_ID}`;
+type VenueSnapshot = Pick<VenueState, 'buildingName' | 'floors' | 'mapsByFloorId' | 'destinations' | 'verticalLinks' | 'blockedEdgeIds'>;
+
+/** Keeps the last good copy so the map still opens when the venue Wi-Fi or the backend is down. */
+async function saveSnapshot(snapshot: VenueSnapshot) {
+  try {
+    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Storage full or unavailable: caching is best-effort.
+  }
+}
+
+async function readSnapshot(): Promise<VenueSnapshot | undefined> {
+  try {
+    const raw = await AsyncStorage.getItem(CACHE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as VenueSnapshot) : undefined;
+    return parsed?.floors?.length ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Load floors, floor maps, vertical links and destinations (once; pass force to reload). */
 export function loadVenue(force = false): Promise<void> {
   if (!force && state.status === 'ready') return Promise.resolve();
@@ -176,17 +201,23 @@ export function loadVenue(force = false): Promise<void> {
       ]);
       const explicit = overview.verticalLinks ?? [];
       const nodes = maps.flatMap((m) => m.nodes);
-      setState({
-        status: 'ready',
+      const fresh: VenueSnapshot = {
         buildingName: overview.building?.name ?? 'SpotWay',
         floors,
         mapsByFloorId: Object.fromEntries(maps.map((m) => [m.floor.id, m])),
         blockedEdgeIds: blockedIdsOf(maps),
         destinations,
         verticalLinks: [...explicit, ...inferVerticalLinks(nodes, floorLevelsOf(floors), explicit)],
-      });
+      };
+      setState({ status: 'ready', offline: false, ...fresh });
+      void saveSnapshot(fresh);
     } catch (e) {
-      setState({ status: 'error', error: e instanceof Error ? e.message : String(e) });
+      const cached = await readSnapshot();
+      if (cached) {
+        setState({ status: 'ready', offline: true, ...cached, notice: { id: ++noticeSeq, kind: 'offline', count: 0 } });
+      } else {
+        setState({ status: 'error', error: e instanceof Error ? e.message : String(e) });
+      }
     } finally {
       loading = null;
     }
@@ -209,6 +240,11 @@ export async function refreshMaps(): Promise<void> {
   refreshing = true;
   try {
     const maps = await Promise.all(state.floors.map((f) => getFloorMap(f.id)));
+    // Back online after running from the saved copy: reload everything once.
+    if (state.offline) {
+      void loadVenue(true);
+      return;
+    }
     const next = blockedIdsOf(maps);
     const prev = state.blockedEdgeIds;
     if (next.length === prev.length && next.every((id, i) => id === prev[i])) return;

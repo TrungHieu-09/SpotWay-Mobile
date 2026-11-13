@@ -191,5 +191,6 @@
   "live.blocked": "A path was just blocked. Your route has been updated.",
   "live.reopened": "A path is open again. Your route has been updated.",
   "store.promotions": "Current offers",
-  "store.promoUntil": "Until {{date}}"
+  "store.promoUntil": "Until {{date}}",
+  "live.offline": "Cannot reach the server. Showing the last saved map."
 }

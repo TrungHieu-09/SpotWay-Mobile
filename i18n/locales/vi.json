@@ -191,5 +191,6 @@
   "live.blocked": "Có khu vực vừa bị chặn. Tuyến đường đã được cập nhật.",
   "live.reopened": "Đường đã thông trở lại. Tuyến đường đã được cập nhật.",
   "store.promotions": "Ưu đãi đang diễn ra",
-  "store.promoUntil": "Đến hết {{date}}"
+  "store.promoUntil": "Đến hết {{date}}",
+  "live.offline": "Không kết nối được máy chủ. Đang dùng bản đồ đã lưu gần nhất."
 }

@@ -28,11 +28,12 @@ export function LiveNotice() {
 
   if (!notice || shownId !== notice.id) return null;
   const blocked = notice.kind === 'blocked';
+  const offline = notice.kind === 'offline';
   return (
     <View pointerEvents="none" accessibilityLiveRegion="polite" style={[styles.wrap, { top: insets.top + 8 }]}>
       <View style={[styles.card, blocked && styles.cardBlocked]}>
-        <MaterialIcons name={blocked ? 'warning' : 'check-circle'} size={20} color={blocked ? '#B3261E' : colors.BLUE} />
-        <Text style={styles.text}>{t(blocked ? 'live.blocked' : 'live.reopened')}</Text>
+        <MaterialIcons name={blocked ? 'warning' : offline ? 'cloud-off' : 'check-circle'} size={20} color={blocked ? '#B3261E' : colors.BLUE} />
+        <Text style={styles.text}>{t(blocked ? 'live.blocked' : offline ? 'live.offline' : 'live.reopened')}</Text>
       </View>
     </View>
   );
