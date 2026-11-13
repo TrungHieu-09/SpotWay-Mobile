@@ -44,7 +44,7 @@ export function useTrip({ to, from, evac }: { to?: string; from?: string; evac: 
       warningCode: result.warningCode,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [venue.status, venue.fireNodeIds, venue.blockedEdgeIds, startNodeId, to, evac, accessible, incident]);
+  }, [venue.status, venue.fireNodeIds, venue.remoteIncident, venue.blockedEdgeIds, startNodeId, to, evac, accessible, incident]);
 
   return { venue, trip, startNodeId, accessible, incident };
 }

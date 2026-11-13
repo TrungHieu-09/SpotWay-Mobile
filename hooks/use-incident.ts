@@ -1,11 +1,11 @@
-import { useSyncExternalStore } from 'react';
+import { useMemo, useSyncExternalStore } from 'react';
 
-import { setFireNodes } from '@/data/venue/venue';
+import { nodeById, setFireNodes, useVenue, type RemoteIncident } from '@/data/venue/venue';
 
-/** A simulated incident anchored at a graph node of the real building. */
-export type Incident = { floorId: string; nodeId: string; type: 'fire' | 'maintenance'; name: string };
+/** An incident anchored at a graph node of the real building. */
+export type Incident = { floorId: string; nodeId: string; type: 'fire' | 'maintenance'; name: string; remote?: boolean };
 
-// DEMO ONLY: a simulated incident kept in memory. No push notification is ever sent.
+// A locally simulated incident (demo panel), kept in memory. The real one comes from the building staff via the backend.
 let incident: Incident | null = null;
 const listeners = new Set<() => void>();
 
@@ -24,8 +24,22 @@ const subscribe = (listener: () => void) => {
   };
 };
 
-/** The simulated incident, or null when there is none. */
+function fromRemote(remote: RemoteIncident): Incident | null {
+  const nodeId = remote.nodeIds[0];
+  if (!nodeId) return null;
+  return {
+    floorId: nodeById(nodeId)?.floorId ?? remote.floorIds[0] ?? '',
+    nodeId,
+    type: 'fire',
+    name: remote.message ?? nodeById(nodeId)?.name ?? '',
+    remote: true,
+  };
+}
+
+/** The active incident (a simulated one wins, else the one raised by the building staff) or null, and a setter for the simulated one. */
 export function useIncident(): [Incident | null, (next: Incident | null) => void] {
-  const value = useSyncExternalStore(subscribe, () => incident, () => incident);
+  const local = useSyncExternalStore(subscribe, () => incident, () => incident);
+  const remote = useVenue().remoteIncident;
+  const value = useMemo(() => local ?? (remote ? fromRemote(remote) : null), [local, remote]);
   return [value, setIncident];
 }

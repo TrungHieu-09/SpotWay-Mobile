@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
-import { refreshMaps } from '@/data/venue/venue';
+import { refreshIncident, refreshMaps } from '@/data/venue/venue';
 
 const INTERVAL_MS = 5000;
 
@@ -11,8 +11,12 @@ export function useLiveVenue() {
     let timer: ReturnType<typeof setInterval> | undefined;
     const start = () => {
       if (timer) return;
-      void refreshMaps();
-      timer = setInterval(() => void refreshMaps(), INTERVAL_MS);
+      const tick = () => {
+        void refreshIncident();
+        void refreshMaps();
+      };
+      tick();
+      timer = setInterval(tick, INTERVAL_MS);
     };
     const stop = () => {
       if (timer) clearInterval(timer);

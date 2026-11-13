@@ -132,7 +132,13 @@ export type VenueState = {
   notice?: { id: number; kind: 'blocked' | 'reopened' | 'offline'; count: number };
   /** True when the data comes from the last saved copy because the backend could not be reached. */
   offline?: boolean;
+  /** Emergency raised by the building staff (polled from the backend). */
+  remoteIncident?: RemoteIncident;
+  /** Last node the user is known to stand at (scan or start point); where an evacuation starts from. */
+  userNodeId?: string;
 };
+
+export type RemoteIncident = { id: string; type: 'FIRE'; nodeIds: string[]; floorIds: string[]; message: string | null; startedAt: string };
 
 let state: VenueState = {
   status: 'idle',
@@ -262,6 +268,28 @@ export async function refreshMaps(): Promise<void> {
   }
 }
 
+/** Polls the emergency state. A failed poll keeps the last known state: never clear an alarm because the network blinked. */
+export async function refreshIncident(): Promise<void> {
+  try {
+    const res = await request<{ active: boolean } & Partial<RemoteIncident>>(`/public/buildings/${BUILDING_ID}/incident`, undefined, 8_000);
+    const current = state.remoteIncident;
+    if (!res.active) {
+      if (current) setState({ remoteIncident: undefined });
+      return;
+    }
+    if (current?.id === res.id) return;
+    setState({
+      remoteIncident: { id: res.id!, type: 'FIRE', nodeIds: res.nodeIds ?? [], floorIds: res.floorIds ?? [], message: res.message ?? null, startedAt: res.startedAt ?? '' },
+    });
+  } catch {
+    // Offline or backend restarting.
+  }
+}
+
+export const setUserNode = (id: string | undefined) => {
+  if (id && id !== state.userNodeId) setState({ userNodeId: id });
+};
+
 export const setFireNodes = (ids: string[]) => setState({ fireNodeIds: ids });
 
 // ---------------------------------------------------------------------------
@@ -310,14 +338,14 @@ export type RouteResult = {
 
 function graphInput(opts: RouteOptions) {
   const { floors, mapsByFloorId, verticalLinks, fireNodeIds } = state;
-  const fire = [...fireNodeIds, ...(opts.avoidNodeIds ?? [])];
+  const fire = [...fireNodeIds, ...(state.remoteIncident?.nodeIds ?? []), ...(opts.avoidNodeIds ?? [])];
   return {
     nodes: nodesWithPoiExits(mapsByFloorId),
     edges: Object.values(mapsByFloorId).flatMap((m) => m.edges),
     verticalLinks,
     options: {
       wheelchairMode: !!opts.wheelchair,
-      emergencyMode: (fireNodeIds.length ? 'FIRE' : 'NONE') as 'FIRE' | 'NONE',
+      emergencyMode: (fire.length ? 'FIRE' : 'NONE') as 'FIRE' | 'NONE',
       blockedNodeIds: new Set(fire),
       blockedEdgeIds: new Set<string>(),
       allowedTransitions: opts.allowedTransitions,

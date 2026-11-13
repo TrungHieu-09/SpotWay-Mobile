@@ -24,11 +24,11 @@ import {
   loadVenue,
   nodeById,
   plainRoute,
+  setUserNode,
   useVenue,
 } from '@/data/venue/venue';
 import { useAccessibilityMode } from '@/hooks/use-accessibility-mode';
 import { LiveNotice } from '@/components/live-notice';
-import { useLiveVenue } from '@/hooks/use-live-venue';
 import { useIncident } from '@/hooks/use-incident';
 import { useReduceMotion } from '@/hooks/use-reduce-motion';
 
@@ -75,7 +75,6 @@ export default function FloorMapScreen() {
   }>();
 
   const venue = useVenue();
-  useLiveVenue();
   useEffect(() => {
     loadVenue();
   }, []);
@@ -88,6 +87,7 @@ export default function FloorMapScreen() {
     [from, venue.status],
   );
   const startNode = startNodeId ? nodeById(startNodeId) : undefined;
+  useEffect(() => setUserNode(startNodeId), [startNodeId]);
 
   const [floorId, setFloorId] = useState<string | null>(floorParam ?? null);
   useEffect(() => {

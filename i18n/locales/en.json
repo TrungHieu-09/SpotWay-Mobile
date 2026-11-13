@@ -192,5 +192,9 @@
   "live.reopened": "A path is open again. Your route has been updated.",
   "store.promotions": "Current offers",
   "store.promoUntil": "Until {{date}}",
-  "live.offline": "Cannot reach the server. Showing the last saved map."
+  "live.offline": "Cannot reach the server. Showing the last saved map.",
+  "evac.gateTitle": "FIRE ALERT",
+  "evac.gateBody": "There is a fire in the building. Leave now.",
+  "evac.gateHint": "Do not use elevators or escalators. Follow the directions to the nearest exit.",
+  "evac.gateDismiss": "Dismiss"
 }

@@ -6,6 +6,8 @@ import 'react-native-reanimated';
 
 import '@/i18n';
 
+import { EvacuationGate } from '@/components/evacuation-gate';
+
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -29,6 +31,7 @@ export default function RootLayout() {
         <Stack.Screen name="directions" options={{ headerShown: false }} />
         <Stack.Screen name="directions-list" options={{ headerShown: false }} />
       </Stack>
+      <EvacuationGate />
       <StatusBar style="auto" />
     </ThemeProvider>
     </GestureHandlerRootView>
