@@ -26,6 +26,7 @@ import { RoutePromo } from '@/components/route-promo';
 import { TripTracker } from '@/components/trip-tracker';
 import { VoiceGuide } from '@/components/voice-guide';
 import { routeKey, useTrip } from '@/hooks/use-trip';
+import { useStepCounter } from '@/hooks/use-step-counter';
 import { SIM_SPEEDS, simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
 
 import { useColors, type Colors } from '@/hooks/use-colors';
@@ -50,6 +51,9 @@ const STEP_ICON: Record<Exclude<StepKind, 'transfer'>, keyof typeof MaterialIcon
 type Focus = 'follow' | 'stairs' | 'elevator';
 
 const NO_CORNERS: Point[] = [];
+/** Average adult stride (m) and the steps added by the tap fallback when the pedometer is not usable. */
+const STRIDE_METERS = 0.7;
+const TAP_STEPS = 3;
 
 const lowerFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
@@ -108,7 +112,10 @@ export default function DirectionsScreen() {
   // Simulated walker: drives the active step; external step changes (card tap, list) seek it.
   const corners = plan?.corners ?? NO_CORNERS;
   const [speedIndex, setSpeedIndex] = useState(1);
-  const sim = useWalkSimulation(corners, simSpeed(metersPerPixelOf(routeFloorId), SIM_SPEEDS[speedIndex]));
+  const [realWalk, setRealWalk] = useState(false);
+  const sim = useWalkSimulation(corners, simSpeed(metersPerPixelOf(routeFloorId), SIM_SPEEDS[speedIndex]), realWalk);
+  // Real walking: every counted step moves the marker by one stride along the route.
+  const stepSensor = useStepCounter(realWalk, (steps) => sim.advance((steps * STRIDE_METERS) / metersPerPixelOf(routeFloorId)));
   const { segmentIndex, seekToSegment } = sim;
   useEffect(() => {
     setActive(segmentIndex);
@@ -232,6 +239,11 @@ export default function DirectionsScreen() {
   return (
     <View style={styles.root}>
       <LiveNotice />
+      {realWalk && (stepSensor === 'denied' || stepSensor === 'unavailable') && (
+        <View style={styles.sensorNote} pointerEvents="none">
+          <Text style={styles.sensorNoteText}>{t(stepSensor === 'denied' ? 'walk.denied' : 'walk.unavailable')}</Text>
+        </View>
+      )}
       <TripTracker tripKey={routeKey(evac, startNodeId, destId, 0)} evac={evac} destId={destId} arrived={arrived && legIndex === (legs?.length ?? 1) - 1} />
       {!evac && <RoutePromo routeNodeIds={routeNodeIds} destStoreId={destId} from={startNodeId} />}
       <VoiceGuide
@@ -442,7 +454,21 @@ export default function DirectionsScreen() {
           </View>
         ) : (
           <>
-        {!sim.finished && (
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: realWalk }}
+          accessibilityLabel={t('walk.real')}
+          onPress={() => setRealWalk((on) => !on)}
+          hitSlop={6}
+          style={[styles.simBtn, realWalk && { backgroundColor: BLUE }]}>
+          <MaterialIcons name="directions-walk" size={22} color={realWalk ? '#FFFFFF' : BLUE} />
+        </Pressable>
+        {realWalk && !sim.finished && (
+          <Pressable accessibilityRole="button" accessibilityLabel={t('walk.tapSteps')} onPress={() => sim.advance((TAP_STEPS * STRIDE_METERS) / metersPerPixelOf(routeFloorId))} hitSlop={6} style={styles.simBtn}>
+            <Text style={styles.speedText}>{`+${TAP_STEPS}`}</Text>
+          </Pressable>
+        )}
+        {!realWalk && !sim.finished && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={sim.playing ? t('dir.pause') : t('dir.resume')}
@@ -460,7 +486,7 @@ export default function DirectionsScreen() {
           style={styles.simBtn}>
           <MaterialIcons name="layers" size={22} color={BLUE} />
         </Pressable>
-        {!sim.finished && (
+        {!realWalk && !sim.finished && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={t('dir.speed', { speed: SIM_SPEEDS[speedIndex] })}
@@ -646,6 +672,8 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, ACTIVE_BG, CANVAS, CARD }: Color
   bottomInfo: { flex: 1 },
   bottomName: { fontSize: 16, fontWeight: '800', color: INK },
   bottomMeta: { fontSize: 13, color: MUTED, marginTop: 2 },
+  sensorNote: { position: 'absolute', left: 16, right: 64, top: 112, zIndex: 25, padding: 10, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.78)' },
+  sensorNoteText: { color: '#FFFFFF', fontSize: 12, lineHeight: 17 },
   speedText: { fontSize: 13, fontWeight: '800', color: BLUE },
   arrivedBtns: { flexDirection: 'row', gap: 10 },
   arrivedBtn: {

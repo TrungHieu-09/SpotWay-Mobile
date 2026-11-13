@@ -219,5 +219,9 @@
   "multi.meters": "{{count}} m",
   "multi.unreachable": "{{count}} place(s) cannot be reached and were skipped",
   "multi.start": "Start trip",
-  "multi.next": "Next stop: {{name}}"
+  "multi.next": "Next stop: {{name}}",
+  "walk.real": "Real walking: the dot follows your steps",
+  "walk.tapSteps": "Add a few steps (when the sensor does not work)",
+  "walk.denied": "Step counter permission is off. Use the +3 button, or grant it in Settings.",
+  "walk.unavailable": "This device has no step counter. Use the +3 button."
 }

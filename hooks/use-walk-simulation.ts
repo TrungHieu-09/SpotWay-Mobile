@@ -28,10 +28,13 @@ export type WalkSimulation = {
   restart: () => void;
   /** Jump to the start of a leg (the last index means arrival). */
   seekToSegment: (index: number) => void;
+  /** Move the marker forward by a distance in map pixels (used by real walking). */
+  advance: (pixels: number) => void;
 };
 
 /** Moves a marker along a polyline at constant speed, so corners do not cause jumps. */
-export function useWalkSimulation(corners: Point[], speed: number): WalkSimulation {
+/** With `manual` the marker only moves through `advance` (real steps) instead of by the clock. */
+export function useWalkSimulation(corners: Point[], speed: number, manual = false): WalkSimulation {
   const [dist, setDist] = useState(0);
   const [playing, setPlaying] = useState(true);
 
@@ -49,7 +52,7 @@ export function useWalkSimulation(corners: Point[], speed: number): WalkSimulati
   }, [corners]);
 
   const finished = dist >= total;
-  const running = playing && !finished;
+  const running = playing && !finished && !manual;
 
   const lastTick = useRef(0);
   useEffect(() => {
@@ -98,5 +101,7 @@ export function useWalkSimulation(corners: Point[], speed: number): WalkSimulati
     [starts],
   );
 
-  return { position, heading, segmentIndex, progress, playing, finished, play, pause, restart, seekToSegment };
+  const advance = useCallback((pixels: number) => setDist((d) => Math.min(total, Math.max(0, d + pixels))), [total]);
+
+  return { position, heading, segmentIndex, progress, playing, finished, play, pause, restart, seekToSegment, advance };
 }

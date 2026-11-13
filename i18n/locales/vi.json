@@ -219,5 +219,9 @@
   "multi.meters": "{{count}} m",
   "multi.unreachable": "{{count}} nơi không đi tới được nên bị bỏ qua",
   "multi.start": "Bắt đầu chuyến đi",
-  "multi.next": "Điểm tiếp theo: {{name}}"
+  "multi.next": "Điểm tiếp theo: {{name}}",
+  "walk.real": "Đi thật: chấm vị trí di chuyển theo bước chân của bạn",
+  "walk.tapSteps": "Thêm vài bước (khi cảm biến không hoạt động)",
+  "walk.denied": "Chưa cấp quyền cảm biến bước chân. Dùng nút +3 để thêm bước, hoặc cấp quyền trong Cài đặt.",
+  "walk.unavailable": "Máy không có cảm biến bước chân. Dùng nút +3 để thêm bước."
 }
