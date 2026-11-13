@@ -114,6 +114,10 @@ export type VenueState = {
   verticalLinks: VerticalLink[];
   /** Nodes the engine treats as on fire (emergency). */
   fireNodeIds: string[];
+  /** Edges the building staff have blocked (maintenance / incident), kept in sync by polling. */
+  blockedEdgeIds: string[];
+  /** Set when a poll found a change in what is blocked; screens show it briefly. */
+  notice?: { id: number; kind: 'blocked' | 'reopened'; count: number };
 };
 
 let state: VenueState = {
@@ -125,6 +129,7 @@ let state: VenueState = {
   destinations: [],
   verticalLinks: [],
   fireNodeIds: [],
+  blockedEdgeIds: [],
 };
 const listeners = new Set<() => void>();
 const setState = (patch: Partial<VenueState>) => {
@@ -165,6 +170,7 @@ export function loadVenue(force = false): Promise<void> {
         buildingName: overview.building?.name ?? 'SpotWay',
         floors,
         mapsByFloorId: Object.fromEntries(maps.map((m) => [m.floor.id, m])),
+        blockedEdgeIds: blockedIdsOf(maps),
         destinations,
         verticalLinks: [...explicit, ...inferVerticalLinks(nodes, floorLevelsOf(floors), explicit)],
       });
@@ -175,6 +181,38 @@ export function loadVenue(force = false): Promise<void> {
     }
   })();
   return loading;
+}
+
+const blockedIdsOf = (maps: PublicFloorMap[]) =>
+  maps.flatMap((m) => m.edges.filter((e) => e.status === 'BLOCKED').map((e) => e.id)).sort();
+
+let noticeSeq = 0;
+let refreshing = false;
+
+/**
+ * Re-reads the floor maps (cheap) so edges blocked on the web by the building staff reach the phone within seconds.
+ * Only replaces the maps when the set of blocked edges changed; routes are then recomputed by the screens.
+ */
+export async function refreshMaps(): Promise<void> {
+  if (refreshing || state.status !== 'ready') return;
+  refreshing = true;
+  try {
+    const maps = await Promise.all(state.floors.map((f) => getFloorMap(f.id)));
+    const next = blockedIdsOf(maps);
+    const prev = state.blockedEdgeIds;
+    if (next.length === prev.length && next.every((id, i) => id === prev[i])) return;
+    const added = next.filter((id) => !prev.includes(id)).length;
+    const removed = prev.filter((id) => !next.includes(id)).length;
+    setState({
+      mapsByFloorId: Object.fromEntries(maps.map((m) => [m.floor.id, m])),
+      blockedEdgeIds: next,
+      notice: { id: ++noticeSeq, kind: added > 0 ? 'blocked' : 'reopened', count: added > 0 ? added : removed },
+    });
+  } catch {
+    // Offline or backend restarting: keep what we have and try again on the next tick.
+  } finally {
+    refreshing = false;
+  }
 }
 
 export const setFireNodes = (ids: string[]) => setState({ fireNodeIds: ids });

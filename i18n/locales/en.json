@@ -187,5 +187,7 @@
   "access.theme.dark": "Dark",
   "error.loadFailed": "Could not load the building data",
   "error.retry": "Retry",
-  "map.category.poi": "Place"
+  "map.category.poi": "Place",
+  "live.blocked": "A path was just blocked. Your route has been updated.",
+  "live.reopened": "A path is open again. Your route has been updated."
 }

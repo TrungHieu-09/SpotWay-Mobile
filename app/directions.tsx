@@ -21,6 +21,8 @@ import { floorLabel, metersPerPixelOf } from '@/data/venue/venue';
 import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
+import { LiveNotice } from '@/components/live-notice';
+import { useLiveVenue } from '@/hooks/use-live-venue';
 import { routeKey, useTrip } from '@/hooks/use-trip';
 import { simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
 
@@ -68,6 +70,7 @@ export default function DirectionsScreen() {
 
   // One leg per floor, joined by 'transfer' steps; computed on the phone by the routing engine.
   const { venue, trip, startNodeId, incident } = useTrip({ to: destId, from, evac });
+  useLiveVenue();
   const mapTextScale = 1 + (useTextScale() - 1) * 0.5;
   void mapTextScale;
   const legs = trip?.legs ?? null;
@@ -223,6 +226,7 @@ export default function DirectionsScreen() {
 
   return (
     <View style={styles.root}>
+      <LiveNotice />
       <View style={StyleSheet.absoluteFill}>
         {viewFloorObj ? (
           <FloorCanvas

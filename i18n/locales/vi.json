@@ -187,5 +187,7 @@
   "access.theme.dark": "Tối",
   "error.loadFailed": "Không tải được dữ liệu toà nhà",
   "error.retry": "Thử lại",
-  "map.category.poi": "Địa điểm"
+  "map.category.poi": "Địa điểm",
+  "live.blocked": "Có khu vực vừa bị chặn. Tuyến đường đã được cập nhật.",
+  "live.reopened": "Đường đã thông trở lại. Tuyến đường đã được cập nhật."
 }
