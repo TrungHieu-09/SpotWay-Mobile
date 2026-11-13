@@ -103,6 +103,13 @@ export default function DirectionsScreen() {
   const mapTextScale = 1 + (useTextScale() - 1) * 0.5;
   void mapTextScale;
   const legs = trip?.legs ?? null;
+  // A fire that starts while someone follows a normal route turns that route into an evacuation route (the engine sends
+  // them to the nearest safe exit). Switch to the evacuation screen so the title, colours and exit name match what they walk.
+  const turnedEvacuation = !evac && !!trip?.evacuation;
+  useEffect(() => {
+    if (turnedEvacuation) router.replace({ pathname: '/directions', params: { mode: 'evac', from: startNodeId } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnedEvacuation]);
   const [legIndex, setLegIndex] = useState(0);
   useEffect(() => setLegIndex(0), [trip]);
   const plan = useMemo(() => legs?.[legIndex] ?? null, [legs, legIndex]);
