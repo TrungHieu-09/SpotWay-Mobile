@@ -223,5 +223,7 @@
   "walk.real": "Đi thật: chấm vị trí di chuyển theo bước chân của bạn",
   "walk.tapSteps": "Thêm vài bước (khi cảm biến không hoạt động)",
   "walk.denied": "Chưa cấp quyền cảm biến bước chân. Dùng nút +3 để thêm bước, hoặc cấp quyền trong Cài đặt.",
-  "walk.unavailable": "Máy không có cảm biến bước chân. Dùng nút +3 để thêm bước."
+  "walk.unavailable": "Máy không có cảm biến bước chân. Dùng nút +3 để thêm bước.",
+  "evac.exitNearest": "Lối thoát: {{name}} ({{count}} người khác cùng hướng)",
+  "evac.exitSpread": "Lối thoát: {{name}}, chọn để tránh đông ({{count}} người khác cùng hướng)"
 }

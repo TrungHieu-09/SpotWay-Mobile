@@ -22,6 +22,7 @@ import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
 import { LiveNotice } from '@/components/live-notice';
+import { ExitClaimer } from '@/components/exit-claimer';
 import { RoutePromo } from '@/components/route-promo';
 import { TripTracker } from '@/components/trip-tracker';
 import { VoiceGuide } from '@/components/voice-guide';
@@ -78,7 +79,7 @@ export default function DirectionsScreen() {
   const [nextStopId, ...restQueue] = (queue ?? '').split(',').filter(Boolean);
 
   // One leg per floor, joined by 'transfer' steps; computed on the phone by the routing engine.
-  const { venue, trip, routeNodeIds, startNodeId, incident } = useTrip({ to: destId, from, evac });
+  const { venue, trip, routeNodeIds, evacExit, startNodeId, incident } = useTrip({ to: destId, from, evac });
   const mapTextScale = 1 + (useTextScale() - 1) * 0.5;
   void mapTextScale;
   const legs = trip?.legs ?? null;
@@ -239,6 +240,7 @@ export default function DirectionsScreen() {
   return (
     <View style={styles.root}>
       <LiveNotice />
+      {evac && <ExitClaimer exitNodeId={evacExit?.nodeId} />}
       {realWalk && (stepSensor === 'denied' || stepSensor === 'unavailable') && (
         <View style={styles.sensorNote} pointerEvents="none">
           <Text style={styles.sensorNoteText}>{t(stepSensor === 'denied' ? 'walk.denied' : 'walk.unavailable')}</Text>
@@ -319,7 +321,11 @@ export default function DirectionsScreen() {
         {evac && (
           <View style={styles.evacBanner}>
             <MaterialIcons name="warning" size={26} color="#FFFFFF" />
-            <Text style={styles.evacBannerText}>{t('evac.header')}</Text>
+            <Text style={styles.evacBannerText}>
+              {t('evac.header')}
+              {evacExit ? `
+${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExit.name, count: evacExit.others })}` : ''}
+            </Text>
           </View>
         )}
         <Pressable

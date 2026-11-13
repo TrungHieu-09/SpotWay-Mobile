@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react';
 import {
   findIndoorRoute,
   findRouteWithHazardPolicy,
+  getExitCandidates,
   inferVerticalLinks,
   type RouteTarget,
 } from './indoorPathfinding';
@@ -147,6 +148,8 @@ export type VenueState = {
   promotions: BuildingPromotion[];
   /** Emergency raised by the building staff (polled from the backend). */
   remoteIncident?: RemoteIncident;
+  /** Other phones heading to each exit (exit node id -> count), so evacuees can be spread over the exits. */
+  evacLoads: Record<string, number>;
   /** Last node the user is known to stand at (scan or start point); where an evacuation starts from. */
   userNodeId?: string;
 };
@@ -164,6 +167,7 @@ let state: VenueState = {
   fireNodeIds: [],
   blockedEdgeIds: [],
   promotions: [],
+  evacLoads: {},
 };
 const listeners = new Set<() => void>();
 const setState = (patch: Partial<VenueState>) => {
@@ -322,9 +326,10 @@ export async function refreshIncident(): Promise<void> {
     const res = await request<{ active: boolean } & Partial<RemoteIncident>>(`/public/buildings/${BUILDING_ID}/incident`, undefined, 8_000);
     const current = state.remoteIncident;
     if (!res.active) {
-      if (current) setState({ remoteIncident: undefined });
+      if (current) setState({ remoteIncident: undefined, evacLoads: {} });
       return;
     }
+    void refreshEvacLoads();
     if (current?.id === res.id) return;
     setState({
       remoteIncident: { id: res.id!, type: 'FIRE', nodeIds: res.nodeIds ?? [], floorIds: res.floorIds ?? [], message: res.message ?? null, startedAt: res.startedAt ?? '' },
@@ -332,6 +337,60 @@ export async function refreshIncident(): Promise<void> {
   } catch {
     // Offline or backend restarting.
   }
+}
+
+/** Random id of this app run: lets the backend count evacuees without knowing who they are. */
+const DEVICE_ID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+  const r = Math.floor(Math.random() * 16);
+  return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+});
+
+async function refreshEvacLoads(): Promise<void> {
+  try {
+    const res = await request<{ loads: Record<string, number> }>(`/public/buildings/${BUILDING_ID}/incident/evacuation?deviceId=${DEVICE_ID}`, undefined, 8_000);
+    if (JSON.stringify(res.loads) !== JSON.stringify(state.evacLoads)) setState({ evacLoads: res.loads });
+  } catch {
+    // keep the last known loads
+  }
+}
+
+/** Tell the backend which exit this phone is walking to (fire and forget); the answer is the other phones' loads. */
+export function claimExit(exitNodeId: string): void {
+  request<{ loads?: Record<string, number> }>(`/public/buildings/${BUILDING_ID}/incident/evacuation/claim`, { method: 'POST', body: JSON.stringify({ deviceId: DEVICE_ID, exitNodeId }) }, 6_000)
+    .then((res) => {
+      if (res.loads && JSON.stringify(res.loads) !== JSON.stringify(state.evacLoads)) setState({ evacLoads: res.loads });
+    })
+    .catch(() => undefined);
+}
+
+/** Extra metres one other person heading to an exit is worth: enough to prefer a slightly longer, emptier exit. */
+export const CROWD_PENALTY_METERS = 25;
+/** An exit is only swapped for another one when the other is at least this much cheaper (avoids flip-flopping). */
+const SWITCH_MARGIN_METERS = 15;
+
+export type ExitChoice = { exitNodeId: string; route: IndoorRoute; others: number; meters: number; nearestWouldBe?: string };
+
+/**
+ * Picks the evacuation exit that is best for this person and for the crowd: walking distance plus a penalty per other
+ * person already heading to that exit. `prefer` (the exit chosen last time) is kept unless another is clearly better.
+ */
+export function chooseEvacuationExit(startNodeId: string, opts: RouteOptions & { prefer?: string } = {}): ExitChoice | undefined {
+  const { floors, mapsByFloorId, evacLoads } = state;
+  const candidates = getExitCandidates(nodesWithPoiExits(mapsByFloorId), floorLevelsOf(floors));
+  const scored: (ExitChoice & { cost: number })[] = [];
+  for (const exit of candidates) {
+    const route = plainRoute(startNodeId, exit.id, { ...opts, forceEmergency: true });
+    if (!route) continue;
+    const others = evacLoads[exit.id] ?? 0;
+    scored.push({ exitNodeId: exit.id, route, others, meters: route.totalDistance, cost: route.totalDistance + CROWD_PENALTY_METERS * others });
+  }
+  if (scored.length === 0) return undefined;
+  scored.sort((a, b) => a.cost - b.cost);
+  const nearest = [...scored].sort((a, b) => a.meters - b.meters)[0];
+  const best = scored[0];
+  const kept = opts.prefer ? scored.find((s) => s.exitNodeId === opts.prefer) : undefined;
+  const chosen = kept && kept.cost <= best.cost + SWITCH_MARGIN_METERS ? kept : best;
+  return { exitNodeId: chosen.exitNodeId, route: chosen.route, others: chosen.others, meters: chosen.meters, nearestWouldBe: nearest.exitNodeId !== chosen.exitNodeId ? nearest.exitNodeId : undefined };
 }
 
 export const setUserNode = (id: string | undefined) => {
@@ -374,6 +433,8 @@ export type RouteOptions = {
   allowedTransitions?: ReadonlySet<VerticalLinkKind>;
   /** Extra nodes to avoid on top of the active fire nodes. */
   avoidNodeIds?: string[];
+  /** Use evacuation rules (no elevators) even when no fire node is known. */
+  forceEmergency?: boolean;
 };
 
 export type RouteResult = {
@@ -393,7 +454,7 @@ function graphInput(opts: RouteOptions) {
     verticalLinks,
     options: {
       wheelchairMode: !!opts.wheelchair,
-      emergencyMode: (fire.length ? 'FIRE' : 'NONE') as 'FIRE' | 'NONE',
+      emergencyMode: (fire.length || opts.forceEmergency ? 'FIRE' : 'NONE') as 'FIRE' | 'NONE',
       blockedNodeIds: new Set(fire),
       blockedEdgeIds: new Set<string>(),
       allowedTransitions: opts.allowedTransitions,

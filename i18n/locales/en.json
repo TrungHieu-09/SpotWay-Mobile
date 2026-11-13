@@ -223,5 +223,7 @@
   "walk.real": "Real walking: the dot follows your steps",
   "walk.tapSteps": "Add a few steps (when the sensor does not work)",
   "walk.denied": "Step counter permission is off. Use the +3 button, or grant it in Settings.",
-  "walk.unavailable": "This device has no step counter. Use the +3 button."
+  "walk.unavailable": "This device has no step counter. Use the +3 button.",
+  "evac.exitNearest": "Exit: {{name}} ({{count}} others heading there)",
+  "evac.exitSpread": "Exit: {{name}}, chosen to avoid crowding ({{count}} others heading there)"
 }
