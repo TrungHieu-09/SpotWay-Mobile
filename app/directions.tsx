@@ -25,7 +25,7 @@ import { LiveNotice } from '@/components/live-notice';
 import { RoutePromo } from '@/components/route-promo';
 import { VoiceGuide } from '@/components/voice-guide';
 import { routeKey, useTrip } from '@/hooks/use-trip';
-import { simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
+import { SIM_SPEEDS, simSpeed, useWalkSimulation } from '@/hooks/use-walk-simulation';
 
 import { useColors, type Colors } from '@/hooks/use-colors';
 const DANGER = '#D64545';
@@ -103,7 +103,8 @@ export default function DirectionsScreen() {
 
   // Simulated walker: drives the active step; external step changes (card tap, list) seek it.
   const corners = plan?.corners ?? NO_CORNERS;
-  const sim = useWalkSimulation(corners, simSpeed(metersPerPixelOf(routeFloorId)));
+  const [speedIndex, setSpeedIndex] = useState(1);
+  const sim = useWalkSimulation(corners, simSpeed(metersPerPixelOf(routeFloorId), SIM_SPEEDS[speedIndex]));
   const { segmentIndex, seekToSegment } = sim;
   useEffect(() => {
     setActive(segmentIndex);
@@ -436,6 +437,16 @@ export default function DirectionsScreen() {
             <MaterialIcons name={sim.playing ? 'pause' : 'play-arrow'} size={22} color={BLUE} />
           </Pressable>
         )}
+        {!sim.finished && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('dir.speed', { speed: SIM_SPEEDS[speedIndex] })}
+            onPress={() => setSpeedIndex((index) => (index + 1) % SIM_SPEEDS.length)}
+            hitSlop={6}
+            style={styles.simBtn}>
+            <Text style={styles.speedText}>{`${SIM_SPEEDS[speedIndex]}×`}</Text>
+          </Pressable>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('dir.restart')}
@@ -612,6 +623,7 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, ACTIVE_BG, CANVAS, CARD }: Color
   bottomInfo: { flex: 1 },
   bottomName: { fontSize: 16, fontWeight: '800', color: INK },
   bottomMeta: { fontSize: 13, color: MUTED, marginTop: 2 },
+  speedText: { fontSize: 13, fontWeight: '800', color: BLUE },
   arrivedBtns: { flexDirection: 'row', gap: 10 },
   arrivedBtn: {
     height: 44,

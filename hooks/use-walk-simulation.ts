@@ -7,7 +7,10 @@ const WALK_SPEED_MPS = 1.2;
 /** Demo speed-up over real walking speed, so the whole route is watchable in seconds. */
 export const SIM_SPEED_FACTOR = 2.5;
 /** Simulated walking speed in map pixels per second for a floor scale (metres per pixel). */
-export const simSpeed = (metersPerPixel: number) => (WALK_SPEED_MPS / metersPerPixel) * SIM_SPEED_FACTOR;
+export const simSpeed = (metersPerPixel: number, factor = SIM_SPEED_FACTOR) => (WALK_SPEED_MPS / metersPerPixel) * factor;
+
+/** Speeds the demo walker can be switched between (1x = real walking pace). */
+export const SIM_SPEEDS = [1, SIM_SPEED_FACTOR, 5] as const;
 
 const FRAME_MS = 33;
 

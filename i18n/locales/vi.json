@@ -201,5 +201,7 @@
   "voice.off": "Bật đọc hướng dẫn bằng giọng nói",
   "promo.near": "Ưu đãi gần bạn: {{store}}",
   "promo.meters": "cách tuyến {{count}} m",
-  "promo.close": "Đóng gợi ý ưu đãi"
+  "promo.close": "Đóng gợi ý ưu đãi",
+  "welcome.skip": "Chưa có mã QR? Bắt đầu từ sảnh chính",
+  "dir.speed": "Tốc độ mô phỏng {{speed}} lần"
 }

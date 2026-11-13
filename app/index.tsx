@@ -76,6 +76,9 @@ export default function WelcomeScreen() {
             style={({ pressed }) => [styles.cta, pressed && styles.ctaPressed]}>
             <Text style={styles.ctaText}>{t('welcome.cta')}  →</Text>
           </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => router.push('/building')} style={styles.skip}>
+            <Text style={styles.skipText}>{t('welcome.skip')}</Text>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>
@@ -125,5 +128,7 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, CANVAS, BG }: Colors, dark: bool
   note: { fontSize: 13, lineHeight: 18, fontWeight: '500', color: MUTED },
   cta: { height: 58, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: BRAND },
   ctaPressed: { backgroundColor: '#123A78' },
+  skip: { alignItems: 'center', paddingVertical: 10 },
+  skipText: { fontSize: 14, fontWeight: '600', color: BLUE },
   ctaText: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
 });

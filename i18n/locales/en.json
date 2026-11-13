@@ -201,5 +201,7 @@
   "voice.off": "Turn on spoken directions",
   "promo.near": "Offer near you: {{store}}",
   "promo.meters": "{{count}} m off your route",
-  "promo.close": "Dismiss offer"
+  "promo.close": "Dismiss offer",
+  "welcome.skip": "No QR code? Start at the main entrance",
+  "dir.speed": "Simulation speed {{speed}}x"
 }
