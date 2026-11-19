@@ -45,7 +45,9 @@
         {
           "cameraPermission": "SpotWay uses the camera to scan the QR code at your venue."
         }
-      ]
+      ],
+      "expo-status-bar",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
