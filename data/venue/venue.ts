@@ -239,10 +239,11 @@ async function readSnapshot(): Promise<VenueSnapshot | undefined> {
 }
 
 /** Load floors, floor maps, vertical links and destinations (once; pass force to reload). */
-export function loadVenue(force = false): Promise<void> {
+export function loadVenue(force = false, silent = false): Promise<void> {
   if (!force && state.status === 'ready') return Promise.resolve();
   if (loading) return loading;
-  setState({ status: 'loading', error: undefined });
+  // A silent reload (the server changed the map under a running app) keeps the screens as they are instead of flashing a spinner.
+  if (!silent) setState({ status: 'loading', error: undefined });
   let run: Promise<void> | undefined;
   run = (async () => {
     // First load of this run: pick up the building the user was in last time.
@@ -271,11 +272,14 @@ export function loadVenue(force = false): Promise<void> {
         verticalLinks: [...explicit, ...inferVerticalLinks(nodes, floorLevelsOf(floors), explicit)],
       };
       if (id !== activeBuildingId) return; // another QR was scanned while this one was loading
+      structureSig = structureOf(maps);
+      linksSig = linksOf(explicit);
+      venueRev += 1;
       setState({ status: 'ready', offline: false, ...fresh });
       void saveSnapshot(fresh, id);
       void refreshPromotions();
     } catch (e) {
-      if (id !== activeBuildingId) return;
+      if (id !== activeBuildingId || silent) return; // a failed silent reload keeps what the phone already has
       const cached = await readSnapshot();
       if (id !== activeBuildingId) return;
       if (cached) {
@@ -337,6 +341,22 @@ export function switchBuilding(buildingId: string): void {
 const blockedIdsOf = (maps: PublicFloorMap[]) =>
   maps.flatMap((m) => m.edges.filter((e) => e.status === 'BLOCKED').map((e) => e.id)).sort();
 
+/**
+ * Fingerprint of the map structure (node ids and types, edge ids) and of the declared vertical links. When either changes
+ * on the server (a node becomes an escalator, a connector is added) the phone's copy is out of date and is reloaded.
+ */
+const structureOf = (maps: PublicFloorMap[]) =>
+  maps.flatMap((m) => [...m.nodes.map((n) => `n:${n.id}:${n.type}`), ...m.edges.map((e) => `e:${e.id}`)]).sort().join('|');
+const linksOf = (links: VerticalLink[] = []) => links.map((l) => `${l.kind}:${l.nodeIdFrom}:${l.nodeIdTo}`).sort().join('|');
+let structureSig = '';
+let linksSig = '';
+let venueRev = 0;
+/** Bumps every time the venue is (re)loaded, so closures derived from node types can be recomputed. */
+export const venueRevision = () => venueRev;
+/** Vertical links come from a heavier call than the maps, so they are re-checked every few ticks (about 30 s). */
+const LINKS_EVERY = 6;
+let refreshTick = 0;
+
 let noticeSeq = 0;
 let refreshing = false;
 
@@ -352,6 +372,15 @@ export async function refreshMaps(): Promise<void> {
     // Back online after running from the saved copy: reload everything once.
     if (state.offline) {
       void loadVenue(true);
+      return;
+    }
+    let outdated = structureSig !== '' && structureOf(maps) !== structureSig;
+    if (!outdated && linksSig !== '' && refreshTick++ % LINKS_EVERY === 0) {
+      const overview = await getOverview(currentBuildingId()).catch(() => undefined);
+      outdated = !!overview && linksOf(overview.verticalLinks) !== linksSig;
+    }
+    if (outdated) {
+      await loadVenue(true, true);
       return;
     }
     const next = blockedIdsOf(maps);

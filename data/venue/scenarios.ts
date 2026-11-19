@@ -1,4 +1,4 @@
-import { addScenario, announce, currentBuildingId, fetchOperations, getVenue, metersPerPixelOf, nodeById, removeScenario, setScenarios, type Scenario } from './venue';
+import { addScenario, announce, currentBuildingId, fetchOperations, getVenue, metersPerPixelOf, nodeById, removeScenario, setScenarios, venueRevision, type Scenario } from './venue';
 
 /** Radius of a closed zone around the chosen place, in metres. */
 export const ZONE_RADIUS_METERS = 12;
@@ -63,7 +63,9 @@ export async function refreshOperations(): Promise<void> {
     lastSignature = '';
     lastNoticeKey = '';
   }
-  const signature = JSON.stringify([ops.elevator, ops.power, ops.zone?.nodeId ?? null]);
+  // Closures are derived from node types / positions: when the map was reloaded under them, compute them again.
+  const declared = ops.elevator || ops.power || !!ops.zone;
+  const signature = JSON.stringify([ops.elevator, ops.power, ops.zone?.nodeId ?? null, declared ? venueRevision() : 0]);
   if (signature !== lastSignature) {
     const first = lastSignature === '';
     lastSignature = signature;
