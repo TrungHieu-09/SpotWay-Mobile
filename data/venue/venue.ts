@@ -33,9 +33,12 @@ import type {
 // API
 // ---------------------------------------------------------------------------
 
-/** Building shown by the app. Override with EXPO_PUBLIC_BUILDING_ID. */
-export const BUILDING_ID =
-  process.env.EXPO_PUBLIC_BUILDING_ID ?? '48ea6235-ff4a-428b-b75f-a6d7a998d10a';
+/** Building shown until a QR says otherwise (EXPO_PUBLIC_BUILDING_ID overrides it). */
+const DEFAULT_BUILDING_ID = process.env.EXPO_PUBLIC_BUILDING_ID ?? '48ea6235-ff4a-428b-b75f-a6d7a998d10a';
+const ACTIVE_KEY = 'spotway.activeBuilding.v1';
+/** The building the app is showing: set by the QR that was scanned, remembered for the next launch. */
+let activeBuildingId = DEFAULT_BUILDING_ID;
+export const currentBuildingId = () => activeBuildingId;
 
 /**
  * Backend base URL. On a phone "localhost" is the phone itself, so by default the host of the
@@ -107,7 +110,7 @@ export function trackEvent(
   eventType: TrackedEvent,
   extra: { targetId?: string; floorId?: string; query?: string; resultCount?: number; durationSeconds?: number; helpKind?: 'LOST' | 'WHEELCHAIR' | 'SMOKE' | 'OTHER'; nodeId?: string } = {},
 ): void {
-  request<unknown>('/public/events', { method: 'POST', body: JSON.stringify({ eventType, buildingId: BUILDING_ID, ...extra }) }, 6_000).catch(() => undefined);
+  request<unknown>('/public/events', { method: 'POST', body: JSON.stringify({ eventType, buildingId: activeBuildingId, ...extra }) }, 6_000).catch(() => undefined);
 }
 
 /** Resolve a scanned QR token to the node the user is standing at. */
@@ -173,7 +176,7 @@ export type RemoteIncident = { id: string; type: 'FIRE'; nodeIds: string[]; floo
 
 let state: VenueState = {
   status: 'idle',
-  buildingId: BUILDING_ID,
+  buildingId: DEFAULT_BUILDING_ID,
   buildingName: 'SpotWay',
   floors: [],
   mapsByFloorId: {},
@@ -200,13 +203,13 @@ export const useVenue = () => useSyncExternalStore(subscribe, getVenue, getVenue
 
 let loading: Promise<void> | null = null;
 
-const CACHE_KEY = `spotway.venue.v1.${BUILDING_ID}`;
+const cacheKey = (id = activeBuildingId) => `spotway.venue.v1.${id}`;
 type VenueSnapshot = Pick<VenueState, 'buildingName' | 'floors' | 'mapsByFloorId' | 'destinations' | 'verticalLinks' | 'blockedEdgeIds'>;
 
 /** Keeps the last good copy so the map still opens when the venue Wi-Fi or the backend is down. */
-async function saveSnapshot(snapshot: VenueSnapshot) {
+async function saveSnapshot(snapshot: VenueSnapshot, id: string) {
   try {
-    await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(snapshot));
+    await AsyncStorage.setItem(cacheKey(id), JSON.stringify(snapshot));
   } catch {
     // Storage full or unavailable: caching is best-effort.
   }
@@ -214,7 +217,7 @@ async function saveSnapshot(snapshot: VenueSnapshot) {
 
 async function readSnapshot(): Promise<VenueSnapshot | undefined> {
   try {
-    const raw = await AsyncStorage.getItem(CACHE_KEY);
+    const raw = await AsyncStorage.getItem(cacheKey());
     const parsed = raw ? (JSON.parse(raw) as VenueSnapshot) : undefined;
     return parsed?.floors?.length ? parsed : undefined;
   } catch {
@@ -227,17 +230,22 @@ export function loadVenue(force = false): Promise<void> {
   if (!force && state.status === 'ready') return Promise.resolve();
   if (loading) return loading;
   setState({ status: 'loading', error: undefined });
-  loading = (async () => {
+  let run: Promise<void> | undefined;
+  run = (async () => {
+    // First load of this run: pick up the building the user was in last time.
+    await restoreActiveBuilding();
+    const id = activeBuildingId;
+    if (state.buildingId !== id) setState({ buildingId: id });
     try {
       // The API serves calibration as metres per pixel; the engine wants map units per metre.
-      const floors = sortFloors(await getFloors(BUILDING_ID)).map((f) => ({
+      const floors = sortFloors(await getFloors(id)).map((f) => ({
         ...f,
         mapUnitsPerMeter: f.mapUnitsPerMeter ?? (f.metersPerPixel ? 1 / f.metersPerPixel : null),
       }));
       const maps = await Promise.all(floors.map((f) => getFloorMap(f.id)));
       const [destinations, overview] = await Promise.all([
-        searchAll(BUILDING_ID),
-        getOverview(BUILDING_ID).catch(() => ({}) as Awaited<ReturnType<typeof getOverview>>),
+        searchAll(id),
+        getOverview(id).catch(() => ({}) as Awaited<ReturnType<typeof getOverview>>),
       ]);
       const explicit = overview.verticalLinks ?? [];
       const nodes = maps.flatMap((m) => m.nodes);
@@ -249,21 +257,68 @@ export function loadVenue(force = false): Promise<void> {
         destinations,
         verticalLinks: [...explicit, ...inferVerticalLinks(nodes, floorLevelsOf(floors), explicit)],
       };
+      if (id !== activeBuildingId) return; // another QR was scanned while this one was loading
       setState({ status: 'ready', offline: false, ...fresh });
-      void saveSnapshot(fresh);
+      void saveSnapshot(fresh, id);
       void refreshPromotions();
     } catch (e) {
+      if (id !== activeBuildingId) return;
       const cached = await readSnapshot();
+      if (id !== activeBuildingId) return;
       if (cached) {
         setState({ status: 'ready', offline: true, ...cached, notice: { id: ++noticeSeq, kind: 'offline', count: 0 } });
       } else {
         setState({ status: 'error', error: e instanceof Error ? e.message : String(e) });
       }
     } finally {
-      loading = null;
+      if (loading === run) loading = null;
     }
   })();
-  return loading;
+  loading = run;
+  return run;
+}
+
+let restored: Promise<void> | undefined;
+/** Reads the remembered building once per app run (a failure just keeps the default). */
+function restoreActiveBuilding(): Promise<void> {
+  restored ??= AsyncStorage.getItem(ACTIVE_KEY)
+    .then((saved) => {
+      if (saved && /^[\w-]{8,}$/.test(saved) && state.status !== 'ready' && activeBuildingId === DEFAULT_BUILDING_ID) activeBuildingId = saved;
+    })
+    .catch(() => undefined);
+  return restored;
+}
+
+/**
+ * Points the app at another building (the one a scanned QR belongs to). Everything that belongs to the old building
+ * (maps, destinations, promotions, alarm, closures, position) is dropped so nothing leaks across; the new one is
+ * loaded by the next `loadVenue()`. Does nothing when it is already the active building.
+ */
+export function switchBuilding(buildingId: string): void {
+  restored = Promise.resolve();
+  if (!buildingId || buildingId === activeBuildingId) return;
+  activeBuildingId = buildingId;
+  loading = null;
+  AsyncStorage.setItem(ACTIVE_KEY, buildingId).catch(() => undefined);
+  setState({
+    status: 'idle',
+    error: undefined,
+    offline: false,
+    buildingId,
+    buildingName: 'SpotWay',
+    floors: [],
+    mapsByFloorId: {},
+    destinations: [],
+    verticalLinks: [],
+    fireNodeIds: [],
+    blockedEdgeIds: [],
+    promotions: [],
+    evacLoads: {},
+    scenarios: [],
+    remoteIncident: undefined,
+    userNodeId: undefined,
+    announcement: undefined,
+  });
 }
 
 const blockedIdsOf = (maps: PublicFloorMap[]) =>
@@ -306,7 +361,7 @@ export async function refreshMaps(): Promise<void> {
 /** Reloads the running promotions; a failure keeps what is already known. */
 export async function refreshPromotions(): Promise<void> {
   try {
-    const list = await request<BuildingPromotion[]>(`/public/buildings/${BUILDING_ID}/promotions`, undefined, 10_000);
+    const list = await request<BuildingPromotion[]>(`/public/buildings/${activeBuildingId}/promotions`, undefined, 10_000);
     if (JSON.stringify(list.map((p) => p.id)) !== JSON.stringify(state.promotions.map((p) => p.id))) setState({ promotions: list });
   } catch {
     // Promotions are a bonus; never block the map on them.
@@ -339,7 +394,7 @@ export function promotionsAlong(routeNodeIds: string[], excludeStoreId?: string,
 /** Polls the emergency state. A failed poll keeps the last known state: never clear an alarm because the network blinked. */
 export async function refreshIncident(): Promise<void> {
   try {
-    const res = await request<{ active: boolean } & Partial<RemoteIncident>>(`/public/buildings/${BUILDING_ID}/incident`, undefined, 8_000);
+    const res = await request<{ active: boolean } & Partial<RemoteIncident>>(`/public/buildings/${activeBuildingId}/incident`, undefined, 8_000);
     const current = state.remoteIncident;
     if (!res.active) {
       if (current) setState({ remoteIncident: undefined, evacLoads: {} });
@@ -363,7 +418,7 @@ const DEVICE_ID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) =>
 
 async function refreshEvacLoads(): Promise<void> {
   try {
-    const res = await request<{ loads: Record<string, number> }>(`/public/buildings/${BUILDING_ID}/incident/evacuation?deviceId=${DEVICE_ID}`, undefined, 8_000);
+    const res = await request<{ loads: Record<string, number> }>(`/public/buildings/${activeBuildingId}/incident/evacuation?deviceId=${DEVICE_ID}`, undefined, 8_000);
     if (JSON.stringify(res.loads) !== JSON.stringify(state.evacLoads)) setState({ evacLoads: res.loads });
   } catch {
     // keep the last known loads
@@ -372,7 +427,7 @@ async function refreshEvacLoads(): Promise<void> {
 
 /** Tell the backend which exit this phone is walking to (fire and forget); the answer is the other phones' loads. */
 export function claimExit(exitNodeId: string): void {
-  request<{ loads?: Record<string, number> }>(`/public/buildings/${BUILDING_ID}/incident/evacuation/claim`, { method: 'POST', body: JSON.stringify({ deviceId: DEVICE_ID, exitNodeId }) }, 6_000)
+  request<{ loads?: Record<string, number> }>(`/public/buildings/${activeBuildingId}/incident/evacuation/claim`, { method: 'POST', body: JSON.stringify({ deviceId: DEVICE_ID, exitNodeId }) }, 6_000)
     .then((res) => {
       if (res.loads && JSON.stringify(res.loads) !== JSON.stringify(state.evacLoads)) setState({ evacLoads: res.loads });
     })

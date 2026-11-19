@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/scaled-text';
-import { extractQrToken, resolveQrToken } from '@/data/venue/venue';
+import { extractQrToken, resolveQrToken, switchBuilding } from '@/data/venue/venue';
 import { useColors, type Colors } from '@/hooks/use-colors';
 
 // Fixed brand colours; everything else follows the light / dark palette.
@@ -79,6 +79,8 @@ export default function ScanScreen() {
     try {
       const where = await resolveQrToken(token);
       setManualOpen(false);
+      // The QR decides the building: its map, shops, alarm and offers are the ones loaded next.
+      switchBuilding(where.buildingId);
       router.replace({ pathname: '/building', params: { from: where.nodeId, floor: where.floorId, label: where.label } });
     } catch {
       // Unknown / expired token or no connection: allow another try.
