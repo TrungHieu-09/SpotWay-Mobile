@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
+import { refreshOperations } from '@/data/venue/scenarios';
 import { refreshIncident, refreshMaps, refreshPromotions } from '@/data/venue/venue';
 
 const INTERVAL_MS = 5000;
@@ -16,6 +17,7 @@ export function useLiveVenue() {
       if (timer) return;
       const tick = () => {
         void refreshIncident();
+        void refreshOperations();
         void refreshMaps();
         if (ticks++ % PROMO_EVERY === 0) void refreshPromotions();
       };

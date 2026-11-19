@@ -410,6 +410,18 @@ export async function refreshIncident(): Promise<void> {
   }
 }
 
+/** What the manager of this building declared: lifts out, power cut, closed zone, notice. */
+export type RemoteOperations = {
+  elevator: boolean;
+  power: boolean;
+  zone: { nodeId: string; name: string } | null;
+  announcement: { id: number; text: string; at: string } | null;
+};
+
+/** The building's operations state (null when unreachable: the last known state stays in force). */
+export const fetchOperations = (): Promise<RemoteOperations | null> =>
+  request<RemoteOperations>(`/public/buildings/${activeBuildingId}/operations`, undefined, 8_000).catch(() => null);
+
 /** Random id of this app run: lets the backend count evacuees without knowing who they are. */
 const DEVICE_ID = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
   const r = Math.floor(Math.random() * 16);

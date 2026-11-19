@@ -2,11 +2,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/scaled-text';
-import { floorLabel, loadVenue, useVenue } from '@/data/venue/venue';
+import { floorLabel, loadVenue, trackEvent, useVenue } from '@/data/venue/venue';
 import {
   useAccessibilityMode,
   useHighContrast,
@@ -20,6 +20,7 @@ import { useIncident } from '@/hooks/use-incident';
 import { useColors, type Colors } from '@/hooks/use-colors';
 const DANGER = '#D64545';
 const HAZARD_TYPES = ['fire', 'maintenance'] as const;
+const HELP_KINDS = ['LOST', 'WHEELCHAIR', 'SMOKE', 'OTHER'] as const;
 
 const TEXT_SIZES: TextSize[] = ['small', 'medium', 'large'];
 const THEME_MODES: ThemeMode[] = ['system', 'light', 'dark'];
@@ -132,6 +133,27 @@ export default function AccessibilityScreen() {
             </View>
           </View>
         </View>
+
+        <View style={styles.sectionGap} />
+        <Text style={styles.sectionTitle}>{t('demo.help.title')}</Text>
+        <View style={styles.group}>
+          {HELP_KINDS.map((kind, index) => (
+            <Pressable
+              key={kind}
+              accessibilityRole="button"
+              onPress={() => {
+                // The building's manager sees this request (with where the guest stands) on the web.
+                trackEvent('HELP_REQUESTED', { helpKind: kind, nodeId: venue.userNodeId });
+                Alert.alert(t('demo.help.sentTitle'), t('demo.help.sentBody', { need: t(`demo.help.${kind}`) }));
+              }}
+              style={[styles.row, index === HELP_KINDS.length - 1 && styles.rowLast]}>
+              <MaterialIcons name="support-agent" size={22} color={kind === 'SMOKE' ? DANGER : BLUE} />
+              <Text style={styles.rowText}>{t(`demo.help.${kind}`)}</Text>
+              <MaterialIcons name="chevron-right" size={22} color={MUTED} />
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.groupDesc}>{t('demo.help.hint')}</Text>
 
         <View style={styles.sectionGap} />
         <Text style={styles.sectionTitle}>{t('access.sec.demo')}</Text>
