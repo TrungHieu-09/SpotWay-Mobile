@@ -25,7 +25,7 @@ export function poiIcon(poi: Pick<PublicPoi, 'category' | 'name'>): StoreCategor
   if (cat === 'RESTROOM' || cat === 'TOILET' || /vệ sinh|toilet|\bwc\b/.test(name)) return 'wc_male';
   if (cat === 'ELEVATOR' || /thang m[áa]y/.test(name)) return 'elevator';
   if (cat === 'ESCALATOR' || /thang cuốn/.test(name)) return 'escalator';
-  if (cat === 'EXIT' || /thoát|thang b[ộo]/.test(name)) return 'exit';
+  if (cat === 'EXIT' || cat === 'STAIR' || /thoát|thang b[ộo]/.test(name)) return 'exit';
   if (cat === 'ATM' || /\batm\b/.test(name)) return 'atm';
   return null;
 }
