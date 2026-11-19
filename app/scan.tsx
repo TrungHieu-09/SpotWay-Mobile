@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Text } from '@/components/scaled-text';
-import { extractQrToken, resolveQrToken, switchBuilding } from '@/data/venue/venue';
+import { extractQrToken, isBuildingOpen, resolveQrToken, switchBuilding } from '@/data/venue/venue';
 import { useColors, type Colors } from '@/hooks/use-colors';
 
 // Fixed brand colours; everything else follows the light / dark palette.
@@ -43,6 +43,8 @@ export default function ScanScreen() {
   const [codeError, setCodeError] = useState(false);
   const handled = useRef(false);
   const [scanError, setScanError] = useState(false);
+  // The code is a real SpotWay code, but its building has nothing published for guests yet.
+  const [closed, setClosed] = useState(false);
   const lastBad = useRef('');
 
   // A scanned QR that is not a SpotWay code shows an inline error for a moment.
@@ -50,6 +52,7 @@ export default function ScanScreen() {
     if (!scanError) return;
     const id = setTimeout(() => {
       setScanError(false);
+      setClosed(false);
       lastBad.current = '';
     }, 3500);
     return () => clearTimeout(id);
@@ -78,6 +81,13 @@ export default function ScanScreen() {
     handled.current = true;
     try {
       const where = await resolveQrToken(token);
+      if (!(await isBuildingOpen(where.buildingId))) {
+        handled.current = false;
+        lastBad.current = value;
+        setClosed(true);
+        setScanError(true);
+        return;
+      }
       setManualOpen(false);
       // The QR decides the building: its map, shops, alarm and offers are the ones loaded next.
       switchBuilding(where.buildingId);
@@ -173,7 +183,7 @@ export default function ScanScreen() {
           {scanError ? (
             <View style={[styles.banner, styles.bannerError]} accessibilityRole="alert">
               <MaterialIcons name="error-outline" size={17} color={errorColor} />
-              <Text style={[styles.bannerText, styles.bannerErrorText]}>{t('scan.invalidCode')}</Text>
+              <Text style={[styles.bannerText, styles.bannerErrorText]}>{t(closed ? 'scan.closed' : 'scan.invalidCode')}</Text>
             </View>
           ) : (
             <View style={styles.banner}>
@@ -238,7 +248,7 @@ export default function ScanScreen() {
                 onSubmitEditing={() => openVenue(code)}
                 style={styles.input}
               />
-              {codeError && <Text style={styles.inputError}>{t('scan.invalidCode')}</Text>}
+              {codeError && <Text style={styles.inputError}>{t(closed ? 'scan.closed' : 'scan.invalidCode')}</Text>}
               <Pressable
                 accessibilityRole="button"
                 onPress={() => openVenue(code)}

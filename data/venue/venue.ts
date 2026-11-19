@@ -113,6 +113,19 @@ export function trackEvent(
   request<unknown>('/public/events', { method: 'POST', body: JSON.stringify({ eventType, buildingId: activeBuildingId, ...extra }) }, 6_000).catch(() => undefined);
 }
 
+/**
+ * Is this building open to guests (has published floors)? Only a clear "no" from the backend says false;
+ * a network problem says true so the saved copy of the building can still be used.
+ */
+export async function isBuildingOpen(buildingId: string): Promise<boolean> {
+  try {
+    return (await getFloors(buildingId)).length > 0;
+  } catch (error) {
+    const network = error instanceof TypeError || (error instanceof Error && error.name === 'AbortError');
+    return network;
+  }
+}
+
 /** Resolve a scanned QR token to the node the user is standing at. */
 export const resolveQrToken = (token: string) =>
   request<PublicQrResolution>(`/qr/${encodeURIComponent(token)}`, undefined, 10_000);

@@ -28,6 +28,7 @@
   "scan.modalDesc": "Nhập mã tòa nhà được in dưới tem SpotWay tại cột sảnh để tải sơ đồ mặt bằng ngay lập tức.",
   "scan.modalPlaceholder": "VD: SPW-402",
   "scan.modalConfirm": "Xác nhận vị trí",
+  "scan.closed": "Tòa nhà này chưa mở bản đồ cho khách. Hãy hỏi nhân viên tại quầy lễ tân.",
   "scan.invalidCode": "Mã tòa nhà không hợp lệ. Kiểm tra lại mã dưới nhãn SpotWay (dạng SPW-402).",
   "scan.permissionSettings": "Mở cài đặt để cấp quyền camera",
   "search.emptyQuery": "Không tìm thấy gian nào khớp “{{query}}”",

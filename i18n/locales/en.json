@@ -28,6 +28,7 @@
   "scan.modalDesc": "Enter the building code printed under the SpotWay sticker on the lobby pillar to load the floor plan instantly.",
   "scan.modalPlaceholder": "e.g. SPW-402",
   "scan.modalConfirm": "Confirm location",
+  "scan.closed": "This building has not opened its map to guests yet. Please ask the front desk.",
   "scan.invalidCode": "Invalid building code. Check the code under the SpotWay sticker (like SPW-402).",
   "scan.permissionSettings": "Open settings to allow camera",
   "search.emptyQuery": "No store matches “{{query}}”",
