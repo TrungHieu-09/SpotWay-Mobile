@@ -563,6 +563,7 @@ export default function FloorMapScreen() {
 
       {positionToast && (
         <View style={[styles.posToast, { bottom: floatBottom }]}>
+          <MaterialIcons name="my-location" size={18} color={BLUE} />
           <Text style={styles.posToastText} numberOfLines={2}>{positionToast.text}</Text>
           <Pressable accessibilityRole="button" hitSlop={8} onPress={undoPosition}>
             <Text style={styles.posToastUndo}>{t('map.undo')}</Text>
@@ -922,11 +923,13 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, CANVAS, CARD, ACTIVE_BG, TINT }:
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderRadius: 14,
-    backgroundColor: INK,
+    borderWidth: 1,
+    borderColor: BORDER,
+    backgroundColor: CARD,
     ...shadow,
   },
-  posToastText: { flex: 1, fontSize: 13, color: '#FFFFFF' },
-  posToastUndo: { fontSize: 13, fontWeight: '800', color: '#8FB8FF' },
+  posToastText: { flex: 1, fontSize: 13, fontWeight: '600', color: INK },
+  posToastUndo: { fontSize: 13, fontWeight: '800', color: BLUE },
   modalLink: { fontSize: 14, fontWeight: '700', color: BLUE },
   modalClose: { fontSize: 14, fontWeight: '600', color: MUTED },
   modalGo: {
