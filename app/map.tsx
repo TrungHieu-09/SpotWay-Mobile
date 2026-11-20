@@ -24,6 +24,7 @@ import {
   loadVenue,
   nodeById,
   plainRoute,
+  setMyPosition,
   setUserNode,
   useVenue,
 } from '@/data/venue/venue';
@@ -81,12 +82,20 @@ export default function FloorMapScreen() {
   }, []);
   const { floors, mapsByFloorId, destinations } = venue;
 
-  // Where the user stands: a scanned QR node, otherwise the main door of the lowest floor.
+  // Where the user stands: a newly scanned QR node, otherwise the last confirmed position (QR, "I am here", arrival),
+  // otherwise the main door of the lowest floor.
+  const [adoptedFrom, setAdoptedFrom] = useState<string | undefined>();
+  const fromNode = from && nodeById(from) ? from : undefined;
   const startNodeId = useMemo(
-    () => (from && nodeById(from) ? from : defaultStartNodeId()),
+    () => (fromNode && adoptedFrom !== fromNode ? fromNode : defaultStartNodeId()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [from, venue.status],
+    [fromNode, adoptedFrom, venue.status, venue.myPosition],
   );
+  useEffect(() => {
+    if (!fromNode || adoptedFrom === fromNode) return;
+    setMyPosition(fromNode, 'qr');
+    setAdoptedFrom(fromNode);
+  }, [fromNode, adoptedFrom]);
   const startNode = startNodeId ? nodeById(startNodeId) : undefined;
   useEffect(() => setUserNode(startNodeId), [startNodeId]);
 
@@ -99,6 +108,14 @@ export default function FloorMapScreen() {
   const map = floorId ? mapsByFloorId[floorId] : undefined;
 
   const [destId, setDestId] = useState<string | null>(dest ?? null);
+  // The place the person is heading to (picked on search or guided to); tapping other places only browses.
+  const tripDestRef = useRef<string | null>(dest ?? null);
+  const [positionToast, setPositionToast] = useState<{ text: string; undoNodeId?: string; undoSource: 'qr' | 'poi' | 'arrival'; undoDestId: string | null } | null>(null);
+  useEffect(() => {
+    if (!positionToast) return;
+    const id = setTimeout(() => setPositionToast(null), 7000);
+    return () => clearTimeout(id);
+  }, [positionToast]);
   const [navigating, setNavigating] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const [accessible] = useAccessibilityMode();
@@ -124,6 +141,7 @@ export default function FloorMapScreen() {
   useEffect(() => {
     if (!dest) return;
     if (floorParam) setFloorId(floorParam);
+    tripDestRef.current = dest;
     setDestId(dest);
     setNavigating(true);
   }, [dest, floorParam, ts]);
@@ -283,7 +301,7 @@ export default function FloorMapScreen() {
     }
   };
 
-  const openSearch = () => router.push({ pathname: '/search', params: { from } });
+  const openSearch = () => router.push({ pathname: '/search', params: { from: startNodeId } });
   // First tap selects a place as destination; tapping the selected place again opens its details.
   const onStorePress = (id: string) => {
     if (id === destId) {
@@ -296,6 +314,7 @@ export default function FloorMapScreen() {
   // Start turn-by-turn guidance for the selected destination.
   const startGuidance = () => {
     if (!destId) return;
+    tripDestRef.current = destId;
     setNavigating(true);
     router.push({ pathname: '/directions', params: { to: destId, from: startNodeId } });
   };
@@ -333,9 +352,32 @@ export default function FloorMapScreen() {
     ]);
   };
   const clearDestination = () => {
+    tripDestRef.current = null;
     setDestId(null);
     setNavigating(false);
     setDetailOpen(false);
+  };
+  // "I am standing next to this place": there is no live location indoors, so the person tells the app where they are.
+  // The route to the place they were heading to is recomputed from the new position straight away.
+  const iAmHere = () => {
+    if (!store) return;
+    const before = venue.myPosition;
+    const previousNode = startNodeId;
+    const previousDest = destId;
+    setDetailOpen(false);
+    if (!setMyPosition(store.nodeId, 'poi')) return;
+    setFloorId(store.floorId);
+    const resume = tripDestRef.current && tripDestRef.current !== store.id ? tripDestRef.current : null;
+    setDestId(resume);
+    setNavigating(resume !== null);
+    setPositionToast({ text: t('map.hereDone', { name: store.name }), undoNodeId: previousNode, undoSource: before?.source ?? 'qr', undoDestId: previousDest });
+  };
+  const undoPosition = () => {
+    if (!positionToast) return;
+    if (positionToast.undoNodeId) setMyPosition(positionToast.undoNodeId, positionToast.undoSource);
+    setDestId(positionToast.undoDestId);
+    setNavigating(positionToast.undoDestId !== null);
+    setPositionToast(null);
   };
 
   return (
@@ -519,6 +561,15 @@ export default function FloorMapScreen() {
         </Pressable>
       </Modal>
 
+      {positionToast && (
+        <View style={[styles.posToast, { bottom: floatBottom }]}>
+          <Text style={styles.posToastText} numberOfLines={2}>{positionToast.text}</Text>
+          <Pressable accessibilityRole="button" hitSlop={8} onPress={undoPosition}>
+            <Text style={styles.posToastUndo}>{t('map.undo')}</Text>
+          </Pressable>
+        </View>
+      )}
+
       <View style={[styles.cardSlot, { top: topControlsH + 4 }]} pointerEvents="box-none">
           {store && (path || !onUserFloor) && (
             <View style={styles.destCard}>
@@ -531,6 +582,13 @@ export default function FloorMapScreen() {
                   <Text style={styles.destMeta}>{t('map.walkTime', { meters, minutes })}</Text>
                 )}
               </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('map.imHere')}
+                hitSlop={8}
+                onPress={iAmHere}>
+                <MaterialIcons name="my-location" size={18} color={BLUE} />
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={t('map.details')}
@@ -560,6 +618,10 @@ export default function FloorMapScreen() {
               <Text style={styles.modalCategory}>{t('map.floor', { floor: floorLabel(store.floorId) })}</Text>
             )}
             <Text style={styles.modalName}>{store?.name}</Text>
+            <Pressable accessibilityRole="button" onPress={iAmHere} style={styles.hereBtn}>
+              <MaterialIcons name="my-location" size={18} color={BLUE} />
+              <Text style={styles.hereBtnText}>{t('map.imHere')}</Text>
+            </Pressable>
             <View style={styles.modalFooter}>
               <Pressable
                 accessibilityRole="button"
@@ -838,6 +900,33 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, CANVAS, CARD, ACTIVE_BG, TINT }:
     justifyContent: 'space-between',
     marginTop: 20,
   },
+  hereBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    height: 44,
+    marginTop: 16,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: BLUE,
+  },
+  hereBtnText: { fontSize: 14, fontWeight: '700', color: BLUE },
+  posToast: {
+    position: 'absolute',
+    left: 16,
+    right: 140,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: INK,
+    ...shadow,
+  },
+  posToastText: { flex: 1, fontSize: 13, color: '#FFFFFF' },
+  posToastUndo: { fontSize: 13, fontWeight: '800', color: '#8FB8FF' },
   modalLink: { fontSize: 14, fontWeight: '700', color: BLUE },
   modalClose: { fontSize: 14, fontWeight: '600', color: MUTED },
   modalGo: {

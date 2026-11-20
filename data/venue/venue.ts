@@ -172,6 +172,17 @@ export type VenueState = {
   evacLoads: Record<string, number>;
   /** Last node the user is known to stand at (scan or start point); where an evacuation starts from. */
   userNodeId?: string;
+  /** Where the user last said / proved they are (QR, "I am here" on a place, arrival). Routes start here until a newer one. */
+  myPosition?: MyPosition;
+};
+
+/** There is no live location indoors: the position is the last confirmed point, with where it came from and when. */
+export type MyPosition = {
+  buildingId: string;
+  nodeId: string;
+  floorId: string;
+  source: 'qr' | 'poi' | 'arrival';
+  at: number;
 };
 
 /** A closure announced by the building (lift out of order, power cut, zone closed): routes must avoid these nodes. */
@@ -276,6 +287,7 @@ export function loadVenue(force = false, silent = false): Promise<void> {
       linksSig = linksOf(explicit);
       venueRev += 1;
       setState({ status: 'ready', offline: false, ...fresh });
+      void restoreMyPosition();
       void saveSnapshot(fresh, id);
       void refreshPromotions();
     } catch (e) {
@@ -334,6 +346,7 @@ export function switchBuilding(buildingId: string): void {
     scenarios: [],
     remoteIncident: undefined,
     userNodeId: undefined,
+    myPosition: undefined,
     announcement: undefined,
   });
 }
@@ -522,6 +535,33 @@ export const setUserNode = (id: string | undefined) => {
   if (id && id !== state.userNodeId) setState({ userNodeId: id });
 };
 
+const POSITION_KEY = 'spotway.position.v1';
+/** A saved position older than this is not trusted any more (the person has probably walked somewhere else). */
+const POSITION_TTL_MS = 15 * 60_000;
+
+/** Records where the user is: a scanned QR, a place they tapped "I am here" on, or a trip they confirmed as finished. */
+export function setMyPosition(nodeId: string, source: MyPosition['source']): MyPosition | undefined {
+  const node = nodeById(nodeId);
+  if (!node) return undefined;
+  const position: MyPosition = { buildingId: activeBuildingId, nodeId, floorId: node.floorId, source, at: Date.now() };
+  setState({ myPosition: position, userNodeId: nodeId });
+  AsyncStorage.setItem(POSITION_KEY, JSON.stringify(position)).catch(() => undefined);
+  return position;
+}
+
+/** Brings back the last position of THIS building when the app is opened again soon enough. */
+async function restoreMyPosition(): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(POSITION_KEY);
+    const saved = raw ? (JSON.parse(raw) as MyPosition) : undefined;
+    if (!saved || state.myPosition || saved.buildingId !== activeBuildingId) return;
+    if (Date.now() - saved.at > POSITION_TTL_MS || !nodeById(saved.nodeId)) return;
+    setState({ myPosition: saved, userNodeId: saved.nodeId });
+  } catch {
+    // Nothing saved or unreadable: start from the default point.
+  }
+}
+
 let announcementSeq = 0;
 
 /** Closures in force: a kind appears at most once. Routes are recomputed by the screens when this changes. */
@@ -550,8 +590,10 @@ export const nodeById = (id: string) => allNodesOf(state.mapsByFloorId).find((n)
 export const destinationById = (id: string) => state.destinations.find((d) => d.id === id);
 export const poisOf = (floorId: string) => state.mapsByFloorId[floorId]?.pois ?? [];
 
-/** Where the user is assumed to be without a scan: the main door of the lowest floor. */
+/** Where the user is assumed to be: the last confirmed position, otherwise the main door of the lowest floor. */
 export function defaultStartNodeId(): string | undefined {
+  const mine = state.myPosition;
+  if (mine && mine.buildingId === state.buildingId && nodeById(mine.nodeId)) return mine.nodeId;
   const ground = state.floors[0];
   const nodes = state.mapsByFloorId[ground?.id]?.nodes ?? [];
   return (nodes.find((n) => n.type === 'DOOR') ?? nodes.find((n) => n.type === 'EXIT') ?? nodes[0])?.id;

@@ -17,7 +17,7 @@ import { FloorCanvas, markerScale } from '@/components/floor-canvas';
 import { EmptyState } from '@/components/empty-state';
 import { Text } from '@/components/scaled-text';
 import { stepHeadline, type Point, type StepKind } from '@/data/venue/plan';
-import { defaultStartNodeId, destinationById, floorLabel, metersPerPixelOf, nodeById } from '@/data/venue/venue';
+import { defaultStartNodeId, destinationById, floorLabel, metersPerPixelOf, nodeById, setMyPosition } from '@/data/venue/venue';
 import { useTextScale } from '@/hooks/use-accessibility-mode';
 import { useActiveStep } from '@/hooks/use-active-step';
 import { setIncident } from '@/hooks/use-incident';
@@ -62,6 +62,8 @@ const OFF_ROUTE_M = 6;
 const REVERSE_M = 6;
 /** Within this distance of the end the person has arrived (metres). */
 const ARRIVE_M = 2.5;
+/** From this distance the app asks whether the person has arrived: the estimate is not trusted enough to decide for them. */
+const ASK_ARRIVED_M = 10;
 const REROUTE_COOLDOWN_MS = 3000;
 /** Demo walker: one step every this many ms at 1x (about 0.8 m/s), divided by the chosen speed. */
 const DEMO_STEP_MS = 900;
@@ -112,6 +114,9 @@ export default function DirectionsScreen() {
   }, [turnedEvacuation]);
   const [legIndex, setLegIndex] = useState(0);
   useEffect(() => setLegIndex(0), [trip]);
+  // There is no live location indoors, so the person can confirm the arrival themselves.
+  const [confirmedArrived, setConfirmedArrived] = useState(false);
+  useEffect(() => setConfirmedArrived(false), [trip, legIndex]);
   const plan = useMemo(() => legs?.[legIndex] ?? null, [legs, legIndex]);
   const routeFloorId = plan?.floorId ?? '';
   const [active, setActive] = useActiveStep(routeKey(evac, startNodeId, destId, legIndex));
@@ -303,6 +308,16 @@ export default function DirectionsScreen() {
   // Reaching the lift / escalator / stairwell hands over to the next floor's leg after a short pause.
   const lastStep = plan?.steps[plan.steps.length - 1];
   const atTransfer = lastStep?.kind === 'transfer' && sim.finished;
+  // The destination becomes where the person is, so the next route starts there (also after a confirmed arrival).
+  const destNodeId = destinationById(destId)?.nodeId ?? (destId.startsWith('node:') ? destId.slice(5) : undefined);
+  const atDestination = !evac && legIndex === (legs?.length ?? 1) - 1 && (confirmedArrived || (lastStep?.kind === 'arrive' && sim.finished));
+  useEffect(() => {
+    if (atDestination && destNodeId) setMyPosition(destNodeId, 'arrival');
+  }, [atDestination, destNodeId]);
+  const confirmArrival = () => {
+    sim.seekToDistance(sim.total);
+    setConfirmedArrived(true);
+  };
   useEffect(() => {
     // With real walking the person says when they reached the next floor (floor buttons) instead of a timer.
     if (realWalk || !atTransfer || !legs || legIndex >= legs.length - 1) return;
@@ -350,7 +365,11 @@ export default function DirectionsScreen() {
   const remainingMeters =
     legLeft + steps.slice(current + 1).reduce((sum, s) => sum + s.meters, 0) +
     (legs ?? []).slice(legIndex + 1).reduce((sum, l) => sum + l.steps.reduce((a, c) => a + c.meters, 0), 0);
-  const arrived = step.kind === 'arrive' && sim.finished;
+  const isLastLeg = legIndex === (legs?.length ?? 1) - 1;
+  const arrived = (confirmedArrived && isLastLeg) || (step.kind === 'arrive' && sim.finished);
+  const askArrived = !evac && !arrived && isLastLeg && remainingMeters <= ASK_ARRIVED_M;
+  // Going back to the map after arriving: it must start from the destination, not from where this trip began.
+  const returnFrom = atDestination && destNodeId ? destNodeId : from;
   const safe = evac && arrived && legIndex === (legs?.length ?? 1) - 1;
   const remainingMinutes = Math.max(1, Math.ceil(remainingMeters / WALK_SPEED_MPS / 60));
 
@@ -597,6 +616,14 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
         </View>
       </View>
 
+      {askArrived && (
+        <View style={styles.arriveAsk}>
+          <Text style={styles.arriveAskText} numberOfLines={2}>{t('dir.arriveAsk', { dest: destName })}</Text>
+          <Pressable accessibilityRole="button" onPress={confirmArrival} style={[styles.arrivedBtn, styles.arrivedBtnPrimary]}>
+            <Text style={styles.arrivedBtnPrimaryText}>{t('dir.arriveConfirm')}</Text>
+          </Pressable>
+        </View>
+      )}
       <View style={[
           styles.bottom,
           evac && { backgroundColor: EVAC_BG },
@@ -626,7 +653,7 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
             ) : null}
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push({ pathname: '/store', params: { id: destId, from } })}
+              onPress={() => router.push({ pathname: '/store', params: { id: destId, from: returnFrom } })}
               style={[styles.arrivedBtn, styles.arrivedBtnPrimary]}>
               <Text style={styles.arrivedBtnPrimaryText}>{t('dir.viewStore')}</Text>
             </Pressable>
@@ -714,6 +741,16 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
             <Text style={styles.speedText}>{`${SIM_SPEEDS[speedIndex]}×`}</Text>
           </Pressable>
         )}
+        {!evac && isLastLeg && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('dir.arriveConfirm')}
+            onPress={confirmArrival}
+            hitSlop={6}
+            style={styles.simBtn}>
+            <MaterialIcons name="flag" size={22} color={BLUE} />
+          </Pressable>
+        )}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('dir.restart')}
@@ -725,7 +762,7 @@ ${t(evacExit.spreadOut ? 'evac.exitSpread' : 'evac.exitNearest', { name: evacExi
         <Pressable
           accessibilityRole="button"
           onPress={() =>
-            router.dismissTo({ pathname: '/map', params: { from, floor: routeFloor, ts: String(Date.now()) } })
+            router.dismissTo({ pathname: '/map', params: { from: returnFrom, floor: routeFloor, ts: String(Date.now()) } })
           }
           hitSlop={8}>
           <Text style={styles.exit}>{t('dir.exit')}</Text>
@@ -894,6 +931,17 @@ const makeStyles = ({ BLUE, INK, MUTED, BORDER, ACTIVE_BG, CANVAS, CARD }: Color
   sensorNote: { position: 'absolute', left: 16, right: 64, top: 112, zIndex: 25, padding: 10, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.78)' },
   sensorNoteText: { color: '#FFFFFF', fontSize: 12, lineHeight: 17 },
   speedText: { fontSize: 13, fontWeight: '800', color: BLUE },
+  arriveAsk: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderRadius: 14,
+    backgroundColor: ACTIVE_BG,
+  },
+  arriveAskText: { flex: 1, fontSize: 14, fontWeight: '700', color: INK },
   arrivedBtns: { flexDirection: 'row', gap: 10 },
   arrivedBtn: {
     height: 44,
